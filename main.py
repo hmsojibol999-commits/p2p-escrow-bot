@@ -9,11 +9,17 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+# 📦 Import Modules
+from database import init_db, get_connection
+from admin_panel import admin_router
+from seller_shop import seller_router
+from buyer_marketplace import buyer_router
+
 # ⚙️ CONFIGURATION
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Apnar Telegram Numeric ID
+ADMIN_ID = int(os.getenv("ADMIN_ID", "6226350422"))
 
-USDT_RATE = 125.0  # 1 USDT = 125 BDT
+USDT_RATE = 125.0
 BINANCE_PAY_ID = "110549937"
 BKASH_NUMBER = "01833878871"
 NAGAD_NUMBER = "01833878871"
@@ -22,62 +28,10 @@ ROCKET_NUMBER = "01833878871"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# 🗄️ DATABASE SETUP
-def init_db():
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            first_name TEXT,
-            username TEXT,
-            balance REAL DEFAULT 0.0
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS deposits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            method TEXT,
-            amount REAL,
-            trx_or_username TEXT,
-            status TEXT DEFAULT 'Pending'
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS withdrawals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            method TEXT,
-            amount REAL,
-            account_number TEXT,
-            status TEXT DEFAULT 'Pending'
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def get_user_balance(user_id, first_name="", username=""):
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    if not row:
-        cursor.execute("INSERT INTO users (user_id, first_name, username, balance) VALUES (?, ?, ?, ?)",
-                       (user_id, first_name, username, 0.0))
-        conn.commit()
-        balance = 0.0
-    else:
-        balance = row[0]
-    conn.close()
-    return balance
-
-def update_user_balance(user_id, amount):
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-    conn.commit()
-    conn.close()
+# Include Routers
+dp.include_router(admin_router)
+dp.include_router(seller_router)
+dp.include_router(buyer_router)
 
 # 🧠 FSM STATES
 class DepositState(StatesGroup):
@@ -95,7 +49,8 @@ def main_reply_keyboard():
         keyboard=[
             [KeyboardButton(text="🛍️ Buy Products")],
             [KeyboardButton(text="👤 My Profile"), KeyboardButton(text="💳 Deposit")],
-            [KeyboardButton(text="📤 Withdraw"), KeyboardButton(text="👨‍💻 Support")]
+            [KeyboardButton(text="📤 Withdraw"), KeyboardButton(text="🏪 Seller Dashboard")],
+            [KeyboardButton(text="👨‍💻 Support")]
         ],
         resize_keyboard=True
     )
@@ -104,10 +59,19 @@ def main_reply_keyboard():
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
     user = message.from_user
-    get_user_balance(user.id, user.first_name, user.username or "N/A")
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user.id,))
+    row = cursor.fetchone()
+    if not row:
+        cursor.execute("INSERT INTO users (user_id, first_name, username, balance) VALUES (?, ?, ?, ?)",
+                       (user.id, user.first_name, user.username or "N/A", 0.0))
+        conn.commit()
+    conn.close()
+
     welcome_text = (
-        f"👋 **Ji {user.first_name}! P2P Escrow Bot-e shagotom.**\n\n"
-        "Nirapode ID kenabecha o wallet manage korte nicher option-gulo use korun:"
+        f"👋 **Ji {user.first_name}! P2P Escrow & Digital Marketplace Bot-e shagotom.**\n\n"
+        "Nirapode ID/Digital Product kenabecha o wallet manage korte nicher option-gulo use korun:"
     )
     await message.answer(welcome_text, reply_markup=main_reply_keyboard(), parse_mode="Markdown")
 
@@ -115,7 +79,13 @@ async def start_cmd(message: types.Message):
 @dp.message(F.text == "👤 My Profile")
 async def profile_handler(message: types.Message):
     user = message.from_user
-    balance = get_user_balance(user.id, user.first_name, user.username or "N/A")
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user.id,))
+    row = cursor.fetchone()
+    balance = row["balance"] if row else 0.0
+    conn.close()
+
     text = (
         f"👤 **Apnar Profile & Wallet**\n\n"
         f"🆔 **User ID:** `{user.id}`\n"
@@ -200,7 +170,7 @@ async def process_dep_trx(message: types.Message, state: FSMContext):
     
     bdt_amount = amount * USDT_RATE if method == "binance" else amount
 
-    conn = sqlite3.connect("bot_database.db")
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("INSERT INTO deposits (user_id, method, amount, trx_or_username) VALUES (?, ?, ?, ?)",
                    (message.from_user.id, method, bdt_amount, trx_input))
@@ -211,7 +181,6 @@ async def process_dep_trx(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ **Request Jama Hoyeche!**\n\nAdmin verify kore 1-2 minute-er moddhe balance add kore dibe.", parse_mode="Markdown")
 
-    # 📩 Notify Admin with Approve/Reject Buttons
     admin_btn = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Approve", callback_data=f"appdep_{dep_id}"),
@@ -233,7 +202,13 @@ async def process_dep_trx(message: types.Message, state: FSMContext):
 # 📤 WITHDRAW FLOW
 @dp.message(F.text == "📤 Withdraw")
 async def withdraw_start(message: types.Message, state: FSMContext):
-    balance = get_user_balance(message.from_user.id)
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (message.from_user.id,))
+    row = cursor.fetchone()
+    balance = row["balance"] if row else 0.0
+    conn.close()
+
     if balance <= 0:
         await message.answer("⚠️ Apnar wallet-e kono balance nei!")
         return
@@ -258,7 +233,13 @@ async def withdraw_method_selected(callback: types.CallbackQuery, state: FSMCont
 async def process_wd_amount(message: types.Message, state: FSMContext):
     try:
         amount = float(message.text)
-        balance = get_user_balance(message.from_user.id)
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance FROM users WHERE user_id = ?", (message.from_user.id,))
+        row = cursor.fetchone()
+        balance = row["balance"] if row else 0.0
+        conn.close()
+
         if amount <= 0 or amount > balance:
             raise ValueError()
     except ValueError:
@@ -281,11 +262,9 @@ async def process_wd_account(message: types.Message, state: FSMContext):
     method = user_data.get("withdraw_method")
     amount = user_data.get("withdraw_amount")
     
-    # Balance Hold / Deduct
-    update_user_balance(message.from_user.id, -amount)
-
-    conn = sqlite3.connect("bot_database.db")
+    conn = get_connection()
     cursor = conn.cursor()
+    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, message.from_user.id))
     cursor.execute("INSERT INTO withdrawals (user_id, method, amount, account_number) VALUES (?, ?, ?, ?)",
                    (message.from_user.id, method, amount, account_no))
     wd_id = cursor.lastrowid
@@ -295,7 +274,6 @@ async def process_wd_account(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ **Withdraw Request Submitted!**\n\nAdmin verify kore apnar account-e taka pathiye dibe.", parse_mode="Markdown")
 
-    # 📩 Admin Notification
     admin_btn = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Complete Payout", callback_data=f"appwd_{wd_id}"),
@@ -314,22 +292,22 @@ async def process_wd_account(message: types.Message, state: FSMContext):
     except Exception as e:
         print(f"Failed to notify admin: {e}")
 
-# 👑 ADMIN CALLBACK HANDLERS
+# 👑 ADMIN APPROVAL HANDLERS FOR DEPOSIT & WITHDRAW
 @dp.callback_query(F.data.startswith("appdep_"))
 async def approve_deposit(callback: types.CallbackQuery):
     dep_id = callback.data.split("_")[1]
-    conn = sqlite3.connect("bot_database.db")
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, amount, status FROM deposits WHERE id = ?", (dep_id,))
     row = cursor.fetchone()
     
-    if row and row[2] == "Pending":
-        user_id, amount, _ = row
+    if row and row["status"] == "Pending":
+        user_id = row["user_id"]
+        amount = row["amount"]
         cursor.execute("UPDATE deposits SET status = 'Approved' WHERE id = ?", (dep_id,))
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
         conn.commit()
         conn.close()
-        
-        update_user_balance(user_id, amount)
         
         await callback.message.edit_text(callback.message.text + "\n\n🟢 **STATUS: APPROVED**")
         try:
@@ -343,13 +321,13 @@ async def approve_deposit(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("rejdep_"))
 async def reject_deposit(callback: types.CallbackQuery):
     dep_id = callback.data.split("_")[1]
-    conn = sqlite3.connect("bot_database.db")
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, status FROM deposits WHERE id = ?", (dep_id,))
     row = cursor.fetchone()
     
-    if row and row[1] == "Pending":
-        user_id = row[0]
+    if row and row["status"] == "Pending":
+        user_id = row["user_id"]
         cursor.execute("UPDATE deposits SET status = 'Rejected' WHERE id = ?", (dep_id,))
         conn.commit()
         conn.close()
@@ -363,56 +341,6 @@ async def reject_deposit(callback: types.CallbackQuery):
         conn.close()
         await callback.answer("Already processed!")
 
-@dp.callback_query(F.data.startswith("appwd_"))
-async def approve_withdraw(callback: types.CallbackQuery):
-    wd_id = callback.data.split("_")[1]
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, amount, status FROM withdrawals WHERE id = ?", (wd_id,))
-    row = cursor.fetchone()
-    
-    if row and row[2] == "Pending":
-        user_id, amount, _ = row
-        cursor.execute("UPDATE withdrawals SET status = 'Completed' WHERE id = ?", (wd_id,))
-        conn.commit()
-        conn.close()
-        
-        await callback.message.edit_text(callback.message.text + "\n\n🟢 **STATUS: COMPLETED**")
-        try:
-            await bot.send_message(user_id, f"🎉 **Withdraw Successful!**\n\nApnar **{amount:.2f} BDT** payout complete kora hoyeche.", parse_mode="Markdown")
-        except:
-            pass
-    else:
-        conn.close()
-        await callback.answer("Already processed!")
-
-@dp.callback_query(F.data.startswith("rejwd_"))
-async def reject_withdraw(callback: types.CallbackQuery):
-    wd_id = callback.data.split("_")[1]
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, amount, status FROM withdrawals WHERE id = ?", (wd_id,))
-    row = cursor.fetchone()
-    
-    if row and row[2] == "Pending":
-        user_id, amount, _ = row
-        cursor.execute("UPDATE withdrawals SET status = 'Rejected' WHERE id = ?", (wd_id,))
-        conn.commit()
-        conn.close()
-        
-        # Refund Balance
-        update_user_balance(user_id, amount)
-        
-        await callback.message.edit_text(callback.message.text + "\n\n🔴 **STATUS: REJECTED & REFUNDED**")
-        try:
-            await bot.send_message(user_id, f"❌ Apnar withdraw request-ti reject kora hoyeche. **{amount:.2f} BDT** wallet-e refund dewa hoyeche.")
-        except:
-            pass
-    else:
-        conn.close()
-        await callback.answer("Already processed!")
-
-# ❌ CANCEL ACTION
 @dp.callback_query(F.data == "cancel_action")
 async def cancel_handler(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -421,7 +349,7 @@ async def cancel_handler(callback: types.CallbackQuery, state: FSMContext):
 
 # 🌐 RENDER HEALTH CHECK SERVER
 async def handle_health_check(request):
-    return web.Response(text="Part 1: Core Wallet Engine is Alive and Running!")
+    return web.Response(text="P2P Escrow & Dynamic Marketplace Engine is Alive & Running!")
 
 async def main():
     init_db()
@@ -433,7 +361,7 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    print("Bot is starting Part 1 Engine...")
+    print("🚀 Bot Engine Started Successfully with All Modular Handlers...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
