@@ -11,8 +11,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 
 from database import init_db, get_connection
+
+# All Routers Import
 from admin_panel import admin_router
 from wallet import wallet_router
+from seller_shop import seller_router
 
 # ⚙️ CONFIGURATION
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
@@ -24,9 +27,10 @@ PROMO_CHANNEL = "@p2p_escrow_deals_and_promotion"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Router Include
+# Include All Routers Engine
 dp.include_router(admin_router)
 dp.include_router(wallet_router)
+dp.include_router(seller_router)
 
 # ----------------------------------------------------
 # 🔘 KEYBOARD BUILDERS (UI / UX Flow)
