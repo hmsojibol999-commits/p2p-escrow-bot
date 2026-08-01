@@ -102,7 +102,16 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
-
+    # 7. Payment Methods Settings
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS payment_methods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        method_name TEXT UNIQUE NOT NULL,
+        account_details TEXT NOT NULL,
+        status TEXT DEFAULT 'active'
+    )
+    """)
+    
     conn.commit()
     conn.close()
     print("✅ P2P Escrow Database Initialized Successfully!")
