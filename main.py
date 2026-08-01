@@ -2,210 +2,203 @@ import asyncio
 import os
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.filters import CommandStart, Command
+from aiogram.types import (
+    ReplyKeyboardMarkup, KeyboardButton, 
+    InlineKeyboardMarkup, InlineKeyboardButton
+)
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 
-# 📦 Import Modular Handlers
 from database import init_db, get_connection
 from admin_panel import admin_router
-from seller_shop import seller_router
-from buyer_marketplace import buyer_router
 
 # ⚙️ CONFIGURATION
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "6226350422"))
 
-USDT_RATE = 125.0
-BINANCE_PAY_ID = "110549937"
-BKASH_NUMBER = "01833878871"
-NAGAD_NUMBER = "01833878871"
-ROCKET_NUMBER = "01833878871"
+OFFICIAL_CHANNEL = "@p2p_escrow_official_updates"
+PROMO_CHANNEL = "@p2p_escrow_deals_and_promotion"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Register Routers (First Custom Routers, then Main)
+# Router Include
 dp.include_router(admin_router)
-dp.include_router(seller_router)
-dp.include_router(buyer_router)
 
-# 🧠 FSM STATES
-class DepositState(StatesGroup):
-    waiting_for_amount = State()
-    waiting_for_trx = State()
+# ----------------------------------------------------
+# 🔘 KEYBOARD BUILDERS (UI / UX Flow)
+# ----------------------------------------------------
 
-class WithdrawState(StatesGroup):
-    waiting_for_method = State()
-    waiting_for_amount = State()
-    waiting_for_account = State()
+# Level 1: Home Reply Keyboard
+def main_reply_keyboard(role="buyer"):
+    kb = [
+        [KeyboardButton(text="🏠 Home"), KeyboardButton(text="🛒 Marketplace")],
+        [KeyboardButton(text="💰 Wallet"), KeyboardButton(text="📦 My Orders")],
+        [KeyboardButton(text="👤 My Account"), KeyboardButton(text="☎️ Support")]
+    ]
+    if role == "admin":
+        kb.append([KeyboardButton(text="⚙️ Admin Panel")])
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
-# 🔘 MAIN MENU KEYBOARD
-def main_reply_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🛍️ Buy Products")],
-            [KeyboardButton(text="👤 My Profile"), KeyboardButton(text="💳 Deposit")],
-            [KeyboardButton(text="📤 Withdraw"), KeyboardButton(text="🏪 Seller Dashboard")],
-            [KeyboardButton(text="👨‍💻 Support")]
-        ],
-        resize_keyboard=True
-    )
+# Level 2: Marketplace Menu
+def marketplace_reply_keyboard(role="buyer"):
+    buttons = [
+        [KeyboardButton(text="🔍 Browse Products")],
+        [KeyboardButton(text="🏪 Become a Seller" if role != "seller" else "🏪 Seller Center")],
+        [KeyboardButton(text="📦 My Orders")],
+        [KeyboardButton(text="⬅️ Back"), KeyboardButton(text="🏠 Home")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
-# 🚀 START COMMAND
+# Navigation Buttons Generator (Inline)
+def nav_inline_buttons():
+    return [
+        InlineKeyboardButton(text="⬅️ Back", callback_data="nav_back"),
+        InlineKeyboardButton(text="🏠 Home", callback_data="nav_home")
+    ]
+
+# ----------------------------------------------------
+# 🔍 CHANNEL GUARD & USER VETTING
+# ----------------------------------------------------
+async def is_user_joined(user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(chat_id=OFFICIAL_CHANNEL, user_id=user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        print(f"Channel Check Exception: {e}")
+        return True
+
+# ----------------------------------------------------
+# 🚀 CORE HANDLERS
+# ----------------------------------------------------
+
 @dp.message(CommandStart())
-async def start_cmd(message: types.Message):
+@dp.message(F.text == "🏠 Home")
+async def send_welcome(message: types.Message, state: FSMContext):
+    await state.clear()
     user = message.from_user
+
+    # DB Registration
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user.id,))
+    cursor.execute("SELECT user_id, role FROM users WHERE user_id = ?", (user.id,))
     row = cursor.fetchone()
+    
+    role = "buyer"
     if not row:
-        cursor.execute("INSERT INTO users (user_id, first_name, username, balance) VALUES (?, ?, ?, ?)",
-                       (user.id, user.first_name, user.username or "N/A", 0.0))
+        if user.id == ADMIN_ID:
+            role = "admin"
+        cursor.execute(
+            "INSERT INTO users (user_id, first_name, username, role) VALUES (?, ?, ?, ?)",
+            (user.id, user.first_name, user.username or "N/A", role)
+        )
         conn.commit()
+    else:
+        role = row["role"]
     conn.close()
 
-    welcome_text = (
-        f"👋 **Ji {user.first_name}! P2P Escrow Bot-e shagotom.**\n\n"
-        "Nirapode ID kenabecha o wallet manage korte nicher option-gulo use korun:"
-    )
-    await message.answer(welcome_text, reply_markup=main_reply_keyboard(), parse_mode="Markdown")
+    # Channel Check
+    joined = await is_user_joined(user.id)
+    if not joined:
+        join_btn = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Join Official Channel", url=f"https://t.me/{OFFICIAL_CHANNEL.replace('@', '')}")],
+            [InlineKeyboardButton(text="✅ I've Joined", callback_data="verify_join")]
+        ])
+        await message.answer(
+            f"👋 **Hello {user.first_name}!**\n\n"
+            "⚠️ বটটি ব্যবহার করার আগে আমাদের অফিশিয়াল চ্যানেলে জয়েন করা বাধ্যতামূলক।\n\n"
+            "নিচের বাটনে ক্লিক করে জয়েন করুন এবং **`✅ I've Joined`** চাপুন:",
+            reply_markup=join_btn,
+            parse_mode="Markdown"
+        )
+        return
 
-# 👤 PROFILE HANDLER
-@dp.message(F.text == "👤 My Profile")
-async def profile_handler(message: types.Message):
-    user = message.from_user
+    welcome_msg = (
+        f"👋 **Welcome to P2P Escrow Marketplace!**\n\n"
+        "🔒 **Safe & Automated Digital Goods Trading**\n"
+        "✅ Escrow Protection | Verified Sellers | Instant Delivery\n\n"
+        "নিচের মেনু থেকে আপনার পছন্দমতো অপশনটি নির্বাচন করুন:"
+    )
+    await message.answer(welcome_msg, reply_markup=main_reply_keyboard(role), parse_mode="Markdown")
+
+@dp.callback_query(F.data == "verify_join")
+async def verify_join_callback(callback: types.CallbackQuery, state: FSMContext):
+    joined = await is_user_joined(callback.from_user.id)
+    if joined:
+        await callback.message.delete()
+        await callback.message.answer("✅ **ভেরিফিকেশন সফল হয়েছে!**")
+        await send_welcome(callback.message, state)
+    else:
+        await callback.answer("❌ আপনি এখনো চ্যানেলে জয়েন করেননি!", show_alert=True)
+
+# 🛒 MARKETPLACE MENU
+@dp.message(F.text == "🛒 Marketplace")
+@dp.message(F.text == "⬅️ Back")
+async def open_marketplace(message: types.Message):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user.id,))
+    cursor.execute("SELECT role FROM users WHERE user_id = ?", (message.from_user.id,))
     row = cursor.fetchone()
-    balance = row["balance"] if row else 0.0
+    role = row["role"] if row else "buyer"
     conn.close()
 
     text = (
-        f"👤 **Apnar Profile & Wallet**\n\n"
-        f"🆔 **User ID:** `{user.id}`\n"
-        f"👤 **Name:** {user.first_name}\n"
-        f"💰 **Balance:** {balance:.2f} BDT\n"
+        "🛒 **Marketplace Center**\n\n"
+        "এখানে আপনি বিভিন্ন ডিজিটাল প্রোডাক্ট ব্রাউজ করতে পারবেন বা সেলার হিসেবে যুক্ত হতে পারবেন।\n\n"
+        "একটি অপশন বেছে নিন:"
     )
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, reply_markup=marketplace_reply_keyboard(role), parse_mode="Markdown")
 
-# 👨‍💻 SUPPORT HANDLER
-@dp.message(F.text == "👨‍💻 Support")
-async def support_handler(message: types.Message):
-    await message.answer("👨‍💻 **Support Center**\n\nKono shomossha ba jiggeshar jonno Admin-er sathe jogajog korun.")
-
-# 💳 DEPOSIT FLOW
-@dp.message(F.text == "💳 Deposit")
-async def deposit_start(message: types.Message, state: FSMContext):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💗 bKash", callback_data="dep_bkash"), InlineKeyboardButton(text="🧡 Nagad", callback_data="dep_nagad")],
-        [InlineKeyboardButton(text="💜 Rocket", callback_data="dep_rocket")],
-        [InlineKeyboardButton(text="🟡 Binance (USDT)", callback_data="dep_binance")],
-        [InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_action")]
-    ])
-    await message.answer("💳 **Select Payment Method:**", reply_markup=keyboard)
-
-@dp.callback_query(F.data.startswith("dep_"))
-async def deposit_method_selected(callback: types.CallbackQuery, state: FSMContext):
-    method = callback.data.split("_")[1]
-    await state.update_data(deposit_method=method)
-    await state.set_state(DepositState.waiting_for_amount)
-    
-    cancel_btn = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_action")]
-    ])
-    
-    if method == "binance":
-        text = "🟡 **Binance — Enter Amount**\n\nEnter deposit amount in **USDT**:"
-    else:
-        text = f"📱 **{method.capitalize()}**\n\nEnter deposit amount in **BDT**:\n*(Minimum: 10 BDT)*"
-        
-    await callback.message.edit_text(text, reply_markup=cancel_btn, parse_mode="Markdown")
-    await callback.answer()
-
-@dp.message(DepositState.waiting_for_amount)
-async def process_dep_amount(message: types.Message, state: FSMContext):
-    try:
-        amount = float(message.text)
-        if amount <= 0:
-            raise ValueError()
-    except ValueError:
-        await message.answer("⚠️ Anugraha kore shothik shongkhya likhun (e.g. 10 athoba 2).")
-        return
-
-    user_data = await state.get_data()
-    method = user_data.get("deposit_method")
-    await state.update_data(deposit_amount=amount)
-    await state.set_state(DepositState.waiting_for_trx)
-
-    cancel_btn = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_action")]
-    ])
-
-    if method == "binance":
-        bdt_equiv = amount * USDT_RATE
-        text = (
-            f"🟡 **Binance Deposit**\n\n"
-            f"Send: **{amount:.4f} USDT**\n"
-            f"≈ **{bdt_equiv:.2f} BDT** (Rate: 1 USDT = {USDT_RATE} BDT)\n\n"
-            f"Pay to Binance Pay ID:\n`{BINANCE_PAY_ID}`\n\n"
-            f"Taka pathanor por apnar **Binance Username** ba **Pay ID** pathan:"
-        )
-    else:
-        num = BKASH_NUMBER if method == "bkash" else NAGAD_NUMBER if method == "nagad" else ROCKET_NUMBER
-        text = (
-            f"📱 **{method.capitalize()} Deposit**\n\n"
-            f"Send **{amount:.2f} BDT** (Send Money) to:\n`{num}`\n\n"
-            f"Taka pathanor por **Transaction ID (TrxID)** ekhane pathan:"
-        )
-
-    await message.answer(text, reply_markup=cancel_btn, parse_mode="Markdown")
-
-@dp.message(DepositState.waiting_for_trx)
-async def process_dep_trx(message: types.Message, state: FSMContext):
-    trx_input = message.text.strip()
-    user_data = await state.get_data()
-    method = user_data.get("deposit_method")
-    amount = user_data.get("deposit_amount")
-    
-    bdt_amount = amount * USDT_RATE if method == "binance" else amount
-
+# 🔍 BROWSE PRODUCTS & CATEGORIES
+@dp.message(F.text == "🔍 Browse Products")
+async def browse_products(message: types.Message):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO deposits (user_id, method, amount, trx_or_username) VALUES (?, ?, ?, ?)",
-                   (message.from_user.id, method, bdt_amount, trx_input))
-    dep_id = cursor.lastrowid
-    conn.commit()
+    cursor.execute("SELECT * FROM categories WHERE status = 'active'")
+    categories = cursor.fetchall()
     conn.close()
 
-    await state.clear()
-    await message.answer("✅ **Request Jama Hoyeche!**\n\nAdmin verify kore balance add kore dibe.", parse_mode="Markdown")
+    if not categories:
+        text = (
+            "📦 **বর্তমানে কোনো ক্যাটাগরি তৈরি করা হয়নি!**\n\n"
+            "এডমিন নতুন ক্যাটাগরি যোগ করলে এখানে দেখতে পাবেন।"
+        )
+        await message.answer(text, parse_mode="Markdown")
+        return
 
-    admin_btn = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Approve", callback_data=f"appdep_{dep_id}"),
-            InlineKeyboardButton(text="❌ Reject", callback_data=f"rejdep_{dep_id}")
-        ]
-    ])
-    admin_text = (
-        f"📥 **NEW DEPOSIT REQUEST (#DEP{dep_id})**\n\n"
-        f"👤 **User:** {message.from_user.first_name} (`{message.from_user.id}`)\n"
-        f"💳 **Method:** {method.upper()}\n"
-        f"💰 **Amount:** {bdt_amount:.2f} BDT\n"
-        f"🆔 **Trx/User:** `{trx_input}`"
+    inline_kb = []
+    for cat in categories:
+        inline_kb.append([InlineKeyboardButton(text=f"📁 {cat['name']}", callback_data=f"cat_{cat['id']}")])
+    
+    inline_kb.append(nav_inline_buttons())
+
+    await message.answer(
+        "📂 **ক্যাটাগরি নির্বাচন করুন:**\n\nযে ধরণের প্রোডাক্ট কিনতে চান তার ক্যাটাগরিতে চাপ দিন:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_kb),
+        parse_mode="Markdown"
     )
-    try:
-        await bot.send_message(ADMIN_ID, admin_text, reply_markup=admin_btn, parse_mode="Markdown")
-    except Exception as e:
-        print(f"Failed to notify admin: {e}")
 
-# 📤 WITHDRAW FLOW
-@dp.message(F.text == "📤 Withdraw")
-async def withdraw_start(message: types.Message, state: FSMContext):
+# 🏪 BECOME A SELLER
+@dp.message(F.text == "🏪 Become a Seller")
+async def apply_seller(message: types.Message):
+    text = (
+        "🏪 **Apply to Become a Seller**\n\n"
+        "প্লাটফর্মে বিক্রেতা (Seller) হতে এডমিনের অনুমতির প্রয়োজন।\n\n"
+        "⚠️ **সেলার নীতিমালা:**\n"
+        "১. শুধুমাত্র বৈধ ও সঠিক প্রোডাক্ট বিক্রি করতে হবে।\n"
+        "২. কোনো প্রতারণা বা স্প্যাম করার চেষ্টা করলে একাউন্ট স্থায়ীভাবে ব্যালেন্সসহ ব্যান করা হবে।\n\n"
+        "আপনি কি সেলার আবেদনের জন্য প্রস্তুত?"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📝 Apply to Admin", callback_data="req_seller_apply")],
+        nav_inline_buttons()
+    ])
+    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+
+# 💰 WALLET
+@dp.message(F.text == "💰 Wallet")
+async def show_wallet(message: types.Message):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (message.from_user.id,))
@@ -213,108 +206,79 @@ async def withdraw_start(message: types.Message, state: FSMContext):
     balance = row["balance"] if row else 0.0
     conn.close()
 
-    if balance <= 0:
-        await message.answer("⚠️ Apnar wallet-e kono balance nei!")
-        return
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💗 bKash", callback_data="wd_bkash"), InlineKeyboardButton(text="🧡 Nagad", callback_data="wd_nagad")],
-        [InlineKeyboardButton(text="🟡 Binance (USDT)", callback_data="wd_binance")],
-        [InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_action")]
+    text = (
+        "💰 **Your Account Wallet**\n\n"
+        f"💵 **Current Balance:** `{balance:.2f} BDT`\n"
+        "🔒 **Escrow Protection:** Active\n\n"
+        "নিচের বাটন দিয়ে ডিপোজিট বা উইথড্র ফান্ড ম্যানেজ করুন:"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➕ Deposit", callback_data="wallet_deposit"),
+            InlineKeyboardButton(text="➖ Withdraw", callback_data="wallet_withdraw")
+        ],
+        [InlineKeyboardButton(text="📜 Transaction History", callback_data="wallet_history")]
     ])
-    await message.answer(f"📤 **Withdraw Request**\n\nAvailable Balance: **{balance:.2f} BDT**\n\nSelect Payout Method:", reply_markup=keyboard)
+    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
 
-@dp.callback_query(F.data.startswith("wd_"))
-async def withdraw_method_selected(callback: types.CallbackQuery, state: FSMContext):
-    method = callback.data.split("_")[1]
-    await state.update_data(withdraw_method=method)
-    await state.set_state(WithdrawState.waiting_for_amount)
-    await callback.message.edit_text(f"📤 **{method.upper()} Withdraw**\n\nKoto BDT withdraw korte chan likhun:")
-    await callback.answer()
-
-@dp.message(WithdrawState.waiting_for_amount)
-async def process_wd_amount(message: types.Message, state: FSMContext):
-    try:
-        amount = float(message.text)
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT balance FROM users WHERE user_id = ?", (message.from_user.id,))
-        row = cursor.fetchone()
-        balance = row["balance"] if row else 0.0
-        conn.close()
-
-        if amount <= 0 or amount > balance:
-            raise ValueError()
-    except ValueError:
-        await message.answer("⚠️ Anugraha kore shothik amount likhun ja apnar balance-er shoman ba kom.")
-        return
-
-    await state.update_data(withdraw_amount=amount)
-    await state.set_state(WithdrawState.waiting_for_account)
-    
-    user_data = await state.get_data()
-    method = user_data.get("withdraw_method")
-    label = "Binance Pay ID / USDT Address" if method == "binance" else f"{method.capitalize()} Mobile Number"
-    await message.answer(f"📝 Apnar **{label}** pathan:")
-
-@dp.message(WithdrawState.waiting_for_account)
-async def process_wd_account(message: types.Message, state: FSMContext):
-    account_no = message.text.strip()
-    user_data = await state.get_data()
-    method = user_data.get("withdraw_method")
-    amount = user_data.get("withdraw_amount")
-    
+# 👤 MY ACCOUNT
+@dp.message(F.text == "👤 My Account")
+async def my_account(message: types.Message):
+    user = message.from_user
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, message.from_user.id))
-    cursor.execute("INSERT INTO withdrawals (user_id, method, amount, account_number) VALUES (?, ?, ?, ?)",
-                   (message.from_user.id, method, amount, account_no))
-    wd_id = cursor.lastrowid
-    conn.commit()
+    cursor.execute("SELECT role, trust_score, balance FROM users WHERE user_id = ?", (user.id,))
+    row = cursor.fetchone()
     conn.close()
 
-    await state.clear()
-    await message.answer("✅ **Withdraw Request Submitted!**\n\nAdmin verify kore taka pathiye dibe.", parse_mode="Markdown")
+    role = row["role"] if row else "buyer"
+    trust = row["trust_score"] if row else 100
+    balance = row["balance"] if row else 0.0
 
-    admin_btn = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Complete Payout", callback_data=f"appwd_{wd_id}"),
-            InlineKeyboardButton(text="❌ Reject & Refund", callback_data=f"rejwd_{wd_id}")
-        ]
-    ])
-    admin_text = (
-        f"📤 **NEW WITHDRAW REQUEST (#WD{wd_id})**\n\n"
-        f"👤 **User:** {message.from_user.first_name} (`{message.from_user.id}`)\n"
-        f"💳 **Method:** {method.upper()}\n"
-        f"💰 **Amount:** {amount:.2f} BDT\n"
-        f"📱 **Account:** `{account_no}`"
+    text = (
+        f"👤 **Account Overview**\n\n"
+        f"🆔 **User ID:** `{user.id}`\n"
+        f"👤 **Name:** {user.first_name}\n"
+        f"🎭 **Role:** `{role.upper()}`\n"
+        f"⭐ **Trust Score:** `{trust}/100`\n"
+        f"💰 **Balance:** `{balance:.2f} BDT`"
     )
-    try:
-        await bot.send_message(ADMIN_ID, admin_text, reply_markup=admin_btn, parse_mode="Markdown")
-    except Exception as e:
-        print(f"Failed to notify admin: {e}")
+    await message.answer(text, parse_mode="Markdown")
 
-@dp.callback_query(F.data == "cancel_action")
-async def cancel_handler(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.message.edit_text("❌ Action cancelled.")
-    await callback.answer()
+# ☎️ SUPPORT
+@dp.message(F.text == "☎️ Support")
+async def support_center(message: types.Message):
+    text = (
+        "☎️ **Support & Help Desk**\n\n"
+        "আপনার কোনো প্রশ্ন, সমস্যা বা সহায়তার প্রয়োজন হলে আমাদের সাপোর্টে যোগাযোগ করুন।\n\n"
+        "📢 **Official Channel:** @p2p_escrow_official_updates\n"
+        "💬 **Admin Contact:** @Sojib_Admin"
+    )
+    await message.answer(text, parse_mode="Markdown")
 
-# 🌐 RENDER SERVER
-async def handle_health_check(request):
-    return web.Response(text="Bot is Alive!")
+# Nav Callbacks
+@dp.callback_query(F.data == "nav_home")
+async def cb_nav_home(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.delete()
+    await send_welcome(callback.message, state)
+
+# ----------------------------------------------------
+# ⚙️ SERVER & POLLING
+# ----------------------------------------------------
+async def handle_health(request):
+    return web.Response(text="P2P Escrow Engine Online")
 
 async def main():
     init_db()
     app = web.Application()
-    app.router.add_get("/", handle_health_check)
+    app.router.add_get("/", handle_health)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    print("🚀 Bot Engine Started...")
+    print("🚀 Bot Engine Running Successfully...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
