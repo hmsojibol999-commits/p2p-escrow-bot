@@ -1,200 +1,123 @@
-import sqlite3
-import os
-from aiogram import Router, F, types
+from aiogram import types, F, Router
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from database import get_connection
 
 seller_router = Router()
 
-def get_connection():
-    conn = sqlite3.connect("bot_database.db")
-    conn.row_factory = sqlite3.Row
-    return conn
-
-class ShopState(StatesGroup):
-    waiting_for_shop_name = State()
-    waiting_for_shop_desc = State()
-
-class ProductState(StatesGroup):
-    selecting_category = State()
+class AddProductStates(StatesGroup):
+    waiting_for_category = State()
     waiting_for_title = State()
     waiting_for_price = State()
     waiting_for_stock_data = State()
 
-# 🏪 SELLER SHOP MAIN MENU
-@seller_router.message(F.text == "🏪 Seller Dashboard")
-@seller_router.message(F.text == "/seller")
-async def seller_dashboard(message: types.Message):
-    user_id = message.from_user.id
+# --- SELLER DASHBOARD ---
+@seller_router.callback_query(F.data == "seller_add_product")
+async def start_add_product(callback: types.CallbackQuery, state: FSMContext):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM shops WHERE seller_id = ?", (user_id,))
-    shop = cursor.fetchone()
-    conn.close()
-
-    if not shop:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Register Shop", callback_data="register_shop")]
-        ])
-        await message.answer("🏪 **Apnar kono Seller Shop nei!**\n\nProduct o ID sell korte prothome ekta Shop register korun.", reply_markup=kb, parse_mode="Markdown")
-        return
-
-    if shop["status"] == "pending":
-        await message.answer("⏳ **Apnar Shop Registration Review-te ache!**\n\nAdmin approve korle apni product add korte parben.", parse_mode="Markdown")
-        return
-
-    if shop["status"] == "suspended":
-        await message.answer("🔴 **Apnar Shop Suspended kora hoyeche!**\n\nAnugraha kore Support-e jogajog korun.", parse_mode="Markdown")
-        return
-
-    text = (
-        f"🏪 **{shop['shop_name']}**\n"
-        f"⭐ Rating: {shop['rating']} | 📦 Total Sales: {shop['total_sales']}\n\n"
-        f"Nicher option babohar kore inventory manage korun:"
-    )
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Add New Product/Stock", callback_data="add_product")],
-        [InlineKeyboardButton(text="📦 My Listed Products", callback_data="my_products")]
-    ])
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-
-# 📝 REGISTER SHOP FLOW
-@seller_router.callback_query(F.data == "register_shop")
-async def register_shop_start(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(ShopState.waiting_for_shop_name)
-    await callback.message.edit_text("📝 Apnar **Shop Name** (Dokaner Nam) likhun:")
-    await callback.answer()
-
-@seller_router.message(ShopState.waiting_for_shop_name)
-async def process_shop_name(message: types.Message, state: FSMContext):
-    shop_name = message.text.strip()
-    if len(shop_name) < 3:
-        await message.answer("⚠️ Shop Name kompokhe 3 letter-er hote hobe.")
-        return
-    await state.update_data(shop_name=shop_name)
-    await state.set_state(ShopState.waiting_for_shop_desc)
-    await message.answer("📝 Shop-er ekta choto **Description** likhun (e.g. Instant Gmail & FB 2FA Provider):")
-
-@seller_router.message(ShopState.waiting_for_shop_desc)
-async def process_shop_desc(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    shop_name = data.get("shop_name")
-    desc = message.text.strip()
-    user_id = message.from_user.id
-
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO shops (seller_id, shop_name, description, status) VALUES (?, ?, ?, 'approved')",
-                       (user_id, shop_name, desc)) # Auto-approved for fast setup/testing
-        conn.commit()
-        await message.answer(f"🎉 **Congratulations!**\n\nApnar Shop **'{shop_name}'** successfully registered & approved! ekhon `/seller` e giye product add korte parben.", parse_mode="Markdown")
-    except sqlite3.IntegrityError:
-        await message.answer("⚠️ Apnar ekta Shop agge thekei ache!")
-    finally:
-        conn.close()
-
-    await state.clear()
-
-# ➕ ADD PRODUCT FLOW
-@seller_router.callback_query(F.data == "add_product")
-async def add_product_start(callback: types.CallbackQuery, state: FSMContext):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM categories WHERE is_active = 1")
+    cursor.execute("SELECT * FROM categories")
     cats = cursor.fetchall()
     conn.close()
 
     if not cats:
-        await callback.message.edit_text("⚠️ **Marketplace-e ekhono kono Category toiri kora hoyni!**\nAdmin-ke prothome category add korte bolun.")
-        await callback.answer()
+        await callback.answer("⚠️ কোনো ক্যাটাগরি পাওয়া যায়নি! এডমিনকে ক্যাটাগরি যুক্ত করতে বলুন।", show_alert=True)
         return
 
-    buttons = []
+    kb = []
     for c in cats:
-        buttons.append([InlineKeyboardButton(text=f"📁 {c['name']}", callback_data=f"selcat_{c['id']}")])
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await state.set_state(ProductState.selecting_category)
-    await callback.message.edit_text("📂 **Select Category for your Product:**", reply_markup=kb, parse_mode="Markdown")
-    await callback.answer()
+        kb.append([InlineKeyboardButton(text=f"📁 {c['name']}", callback_data=f"sel_cat_{c['id']}")])
+    kb.append([InlineKeyboardButton(text="🏠 Home", callback_data="nav_home")])
 
-@seller_router.callback_query(F.data.startswith("selcat_"))
-async def category_selected(callback: types.CallbackQuery, state: FSMContext):
-    cat_id = int(callback.data.split("_")[1])
-    await state.update_data(category_id=cat_id)
-    await state.set_state(ProductState.waiting_for_title)
-    await callback.message.edit_text("📝 Product-er ekta **Title / Name** likhun:\n*(e.g. Gmail Fresh 2026 / FB 2FA Cookies ID)*")
-    await callback.answer()
+    await state.set_state(AddProductStates.waiting_for_category)
+    await callback.message.edit_text(
+        "📦 **প্রোডাক্টের ক্যাটাগরি সিলেক্ট করুন:**",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
+        parse_mode="Markdown"
+    )
 
-@seller_router.message(ProductState.waiting_for_title)
-async def process_prod_title(message: types.Message, state: FSMContext):
+@seller_router.callback_query(F.data.startswith("sel_cat_"))
+async def process_cat_selection(callback: types.CallbackQuery, state: FSMContext):
+    cat_id = int(callback.data.split("_")[2])
+    await state.update_data(cat_id=cat_id)
+    await state.set_state(AddProductStates.waiting_for_title)
+
+    await callback.message.answer(
+        "📝 **প্রোডাক্টের টাইটেল/নাম লিখুন:**\n\n*(যেমন: Gmail Aged 2023 / Premium Netflix Account)*"
+    )
+
+@seller_router.message(AddProductStates.waiting_for_title)
+async def process_title(message: types.Message, state: FSMContext):
     title = message.text.strip()
-    await state.update_data(title=title)
-    await state.set_state(ProductState.waiting_for_price)
-    await message.answer("💰 Per Piece Product-er **Price (BDT)** likhun:\n*(e.g. 15.50)*")
+    await state.update_data(product_title=title)
+    await state.set_state(AddProductStates.waiting_for_price)
 
-@seller_router.message(ProductState.waiting_for_price)
-async def process_prod_price(message: types.Message, state: FSMContext):
+    await message.answer("💵 **প্রতিটি অ্যাকাউন্টের দাম (BDT) কত লিখুন:**\n\n*(যেমন: 50, 150, 300)*")
+
+@seller_router.message(AddProductStates.waiting_for_price)
+async def process_price(message: types.Message, state: FSMContext):
     try:
         price = float(message.text.strip())
         if price <= 0:
             raise ValueError()
+        
+        await state.update_data(product_price=price)
+        await state.set_state(AddProductStates.waiting_for_stock_data)
+
+        await message.answer(
+            "📂 **প্রোডাক্টের স্টক ডেটা (Email:Pass) আপলোড করুন:**\n\n"
+            "প্রতি লাইনে ১টি করে অ্যাকাউন্ট লিখুন।\n"
+            "উদাহরণ:\n"
+            "`user1@gmail.com:pass123`\n"
+            "`user2@gmail.com:pass456`",
+            parse_mode="Markdown"
+        )
     except ValueError:
-        await message.answer("⚠️ Anugraha kore shothik Price (BDT) likhun.")
-        return
+        await message.answer("❌ **সঠিক মূল্য লিখুন!** (উদাহরণ: 50)")
 
-    await state.update_data(price=price)
-    await state.set_state(ProductState.waiting_for_stock_data)
-    
-    text = (
-        "📦 **Upload Digital Items / Accounts Credentials**\n\n"
-        "Protiti ID/Account alada line-e likhun:\n"
-        "*(Example:)*\n"
-        "`user1@gmail.com:pass123:2fa_key1`\n"
-        "`user2@gmail.com:pass123:2fa_key2`\n\n"
-        "Koyti line thakbe, bot auto counting kore Stock-e add korbe!"
-    )
-    await message.answer(text, parse_mode="Markdown")
+@seller_router.message(AddProductStates.waiting_for_stock_data)
+async def process_stock_data(message: types.Message, state: FSMContext):
+    raw_data = message.text.strip().split("\n")
+    stock_items = [line.strip() for line in raw_data if line.strip()]
 
-@seller_router.message(ProductState.waiting_for_stock_data)
-async def process_prod_stock(message: types.Message, state: FSMContext):
-    raw_lines = message.text.strip().split("\n")
-    items = [line.strip() for line in raw_lines if line.strip()]
-
-    if not items:
-        await message.answer("⚠️ Kono valid credential পাওয়া যায়নি! Abar line by line pathan.")
+    if not stock_items:
+        await message.answer("❌ কোনো স্টক ডেটা পাওয়া যায়নি! সঠিকভাবে Email:Pass লিখুন।")
         return
 
     data = await state.get_data()
-    user_id = message.from_user.id
+    cat_id = data.get("cat_id")
+    title = data.get("product_title")
+    price = data.get("product_price")
+    seller_id = message.from_user.id
 
     conn = get_connection()
     cursor = conn.cursor()
-    
-    # Get seller shop_id
-    cursor.execute("SELECT id FROM shops WHERE seller_id = ?", (user_id,))
-    shop = cursor.fetchone()
-    shop_id = shop["id"]
 
-    # Insert Product
-    cursor.execute(
-        "INSERT INTO products (shop_id, category_id, title, price, total_stock) VALUES (?, ?, ?, ?, ?)",
-        (shop_id, data["category_id"], data["title"], data["price"], len(items))
-    )
+    # Create Product
+    cursor.execute("""
+        INSERT INTO products (seller_id, category_id, title, price, description)
+        VALUES (?, ?, ?, ?, 'Automated Delivery Stock')
+    """, (seller_id, cat_id, title, price))
+    
     product_id = cursor.lastrowid
 
-    # Insert Items into Stock Locker
-    for item in items:
-        cursor.execute(
-            "INSERT INTO product_stock (product_id, item_data) VALUES (?, ?)",
-            (product_id, item)
-        )
+    # Insert Stock Items
+    for item in stock_items:
+        cursor.execute("""
+            INSERT INTO stock_items (product_id, item_data)
+            VALUES (?, ?)
+        """, (product_id, item))
 
     conn.commit()
     conn.close()
 
     await state.clear()
-    await message.answer(f"🎉 **Product Published Successfully!**\n\n📦 **Title:** {data['title']}\n💰 **Price:** {data['price']} BDT\n📊 **Stock Added:** {len(items)} Pcs", parse_mode="Markdown")
-  
+    await message.answer(
+        f"✅ **প্রোডাক্ট সফলভাবে আপলোড হয়েছে!**\n\n"
+        f"📦 **নাম:** {title}\n"
+        f"💵 **দাম:** {price} BDT\n"
+        f"📊 **মোট স্টক:** {len(stock_items)} টি",
+        parse_mode="Markdown"
+    )
+    
