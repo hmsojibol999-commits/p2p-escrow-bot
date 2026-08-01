@@ -102,7 +102,7 @@ async def save_payment_details(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(f"✅ **{method.upper()} তথ্য সফলভাবে সেভ করা হয়েছে!**\n\n`{details}`")
 
-# 📁 CATEGORY MANAGEMENT
+# 📁 CATEGORY MANAGEMENT (ADD & DELETE)
 @admin_router.callback_query(F.data == "adm_manage_cats")
 async def manage_categories(callback: types.CallbackQuery):
     conn = get_connection()
@@ -112,17 +112,31 @@ async def manage_categories(callback: types.CallbackQuery):
     conn.close()
 
     text = "📁 **Category Management**\n\nবর্তমান ক্যাটাগরি সমূহ:\n"
+    kb = []
     if cats:
         for c in cats:
             text += f"• {c['name']}\n"
+            # Delete Button for each category
+            kb.append([InlineKeyboardButton(text=f"🗑️ Delete {c['name']}", callback_data=f"adm_del_cat_{c['id']}")])
     else:
         text += "⚠️ কোনো ক্যাটাগরি তৈরি করা হয়নি।\n"
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Add New Category", callback_data="adm_add_cat")],
-        [InlineKeyboardButton(text="⬅️ Back", callback_data="adm_back_main")]
-    ])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    kb.append([InlineKeyboardButton(text="➕ Add New Category", callback_data="adm_add_cat")])
+    kb.append([InlineKeyboardButton(text="🏠 Home", callback_data="nav_home")])
+
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
+
+@admin_router.callback_query(F.data.startswith("adm_del_cat_"))
+async def delete_category(callback: types.CallbackQuery):
+    cat_id = int(callback.data.split("_")[3])
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+    conn.commit()
+    conn.close()
+
+    await callback.answer("🗑️ ক্যাটাগরি সফলভাবে ডিলেট করা হয়েছে!", show_alert=True)
+    await manage_categories(callback)
 
 @admin_router.callback_query(F.data == "adm_add_cat")
 async def prompt_add_category(callback: types.CallbackQuery, state: FSMContext):
@@ -143,4 +157,4 @@ async def save_category(message: types.Message, state: FSMContext):
     finally:
         conn.close()
         await state.clear()
-        
+    
