@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 
 from database import init_db, get_connection
 from admin_panel import admin_router
+from wallet import wallet_router
 
 # ⚙️ CONFIGURATION
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
@@ -25,6 +26,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 # Router Include
 dp.include_router(admin_router)
+dp.include_router(wallet_router)
 
 # ----------------------------------------------------
 # 🔘 KEYBOARD BUILDERS (UI / UX Flow)
