@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sqlite3
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
@@ -9,7 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-# 📦 Import Modules
+# 📦 Import Modular Handlers
 from database import init_db, get_connection
 from admin_panel import admin_router
 from seller_shop import seller_router
@@ -28,7 +27,7 @@ ROCKET_NUMBER = "01833878871"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Include Routers
+# Register Routers (First Custom Routers, then Main)
 dp.include_router(admin_router)
 dp.include_router(seller_router)
 dp.include_router(buyer_router)
@@ -70,8 +69,8 @@ async def start_cmd(message: types.Message):
     conn.close()
 
     welcome_text = (
-        f"👋 **Ji {user.first_name}! P2P Escrow & Digital Marketplace Bot-e shagotom.**\n\n"
-        "Nirapode ID/Digital Product kenabecha o wallet manage korte nicher option-gulo use korun:"
+        f"👋 **Ji {user.first_name}! P2P Escrow Bot-e shagotom.**\n\n"
+        "Nirapode ID kenabecha o wallet manage korte nicher option-gulo use korun:"
     )
     await message.answer(welcome_text, reply_markup=main_reply_keyboard(), parse_mode="Markdown")
 
@@ -93,6 +92,11 @@ async def profile_handler(message: types.Message):
         f"💰 **Balance:** {balance:.2f} BDT\n"
     )
     await message.answer(text, parse_mode="Markdown")
+
+# 👨‍💻 SUPPORT HANDLER
+@dp.message(F.text == "👨‍💻 Support")
+async def support_handler(message: types.Message):
+    await message.answer("👨‍💻 **Support Center**\n\nKono shomossha ba jiggeshar jonno Admin-er sathe jogajog korun.")
 
 # 💳 DEPOSIT FLOW
 @dp.message(F.text == "💳 Deposit")
@@ -179,7 +183,7 @@ async def process_dep_trx(message: types.Message, state: FSMContext):
     conn.close()
 
     await state.clear()
-    await message.answer("✅ **Request Jama Hoyeche!**\n\nAdmin verify kore 1-2 minute-er moddhe balance add kore dibe.", parse_mode="Markdown")
+    await message.answer("✅ **Request Jama Hoyeche!**\n\nAdmin verify kore balance add kore dibe.", parse_mode="Markdown")
 
     admin_btn = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -225,7 +229,6 @@ async def withdraw_method_selected(callback: types.CallbackQuery, state: FSMCont
     method = callback.data.split("_")[1]
     await state.update_data(withdraw_method=method)
     await state.set_state(WithdrawState.waiting_for_amount)
-    
     await callback.message.edit_text(f"📤 **{method.upper()} Withdraw**\n\nKoto BDT withdraw korte chan likhun:")
     await callback.answer()
 
@@ -251,8 +254,7 @@ async def process_wd_amount(message: types.Message, state: FSMContext):
     
     user_data = await state.get_data()
     method = user_data.get("withdraw_method")
-    
-    label = "Binance Pay ID / USDT TRC20 Address" if method == "binance" else f"{method.capitalize()} Mobile Number"
+    label = "Binance Pay ID / USDT Address" if method == "binance" else f"{method.capitalize()} Mobile Number"
     await message.answer(f"📝 Apnar **{label}** pathan:")
 
 @dp.message(WithdrawState.waiting_for_account)
@@ -272,7 +274,7 @@ async def process_wd_account(message: types.Message, state: FSMContext):
     conn.close()
 
     await state.clear()
-    await message.answer("✅ **Withdraw Request Submitted!**\n\nAdmin verify kore apnar account-e taka pathiye dibe.", parse_mode="Markdown")
+    await message.answer("✅ **Withdraw Request Submitted!**\n\nAdmin verify kore taka pathiye dibe.", parse_mode="Markdown")
 
     admin_btn = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -292,64 +294,15 @@ async def process_wd_account(message: types.Message, state: FSMContext):
     except Exception as e:
         print(f"Failed to notify admin: {e}")
 
-# 👑 ADMIN APPROVAL HANDLERS FOR DEPOSIT & WITHDRAW
-@dp.callback_query(F.data.startswith("appdep_"))
-async def approve_deposit(callback: types.CallbackQuery):
-    dep_id = callback.data.split("_")[1]
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, amount, status FROM deposits WHERE id = ?", (dep_id,))
-    row = cursor.fetchone()
-    
-    if row and row["status"] == "Pending":
-        user_id = row["user_id"]
-        amount = row["amount"]
-        cursor.execute("UPDATE deposits SET status = 'Approved' WHERE id = ?", (dep_id,))
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-        conn.commit()
-        conn.close()
-        
-        await callback.message.edit_text(callback.message.text + "\n\n🟢 **STATUS: APPROVED**")
-        try:
-            await bot.send_message(user_id, f"🎉 **Deposit Approved!**\n\nApnar wallet-e **{amount:.2f} BDT** balance add kora hoyeche.", parse_mode="Markdown")
-        except:
-            pass
-    else:
-        conn.close()
-        await callback.answer("Already processed!")
-
-@dp.callback_query(F.data.startswith("rejdep_"))
-async def reject_deposit(callback: types.CallbackQuery):
-    dep_id = callback.data.split("_")[1]
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, status FROM deposits WHERE id = ?", (dep_id,))
-    row = cursor.fetchone()
-    
-    if row and row["status"] == "Pending":
-        user_id = row["user_id"]
-        cursor.execute("UPDATE deposits SET status = 'Rejected' WHERE id = ?", (dep_id,))
-        conn.commit()
-        conn.close()
-        
-        await callback.message.edit_text(callback.message.text + "\n\n🔴 **STATUS: REJECTED**")
-        try:
-            await bot.send_message(user_id, "❌ Apnar deposit request-ti reject kora hoyeche. Shothik TrxID die abar chesta korun.")
-        except:
-            pass
-    else:
-        conn.close()
-        await callback.answer("Already processed!")
-
 @dp.callback_query(F.data == "cancel_action")
 async def cancel_handler(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Action cancelled.")
     await callback.answer()
 
-# 🌐 RENDER HEALTH CHECK SERVER
+# 🌐 RENDER SERVER
 async def handle_health_check(request):
-    return web.Response(text="P2P Escrow & Dynamic Marketplace Engine is Alive & Running!")
+    return web.Response(text="Bot is Alive!")
 
 async def main():
     init_db()
@@ -361,7 +314,7 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    print("🚀 Bot Engine Started Successfully with All Modular Handlers...")
+    print("🚀 Bot Engine Started...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
