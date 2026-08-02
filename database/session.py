@@ -1,47 +1,91 @@
 import logging
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
 
-# File 003 (database/connect.py) থেকে Session Factory ইমপোর্ট
-from database.connect import get_session_factory
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
 
-logger = logging.getLogger("DatabaseSession")
+from config import Config
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+logger = logging.getLogger("database.session")
+
+
+# ==========================
+# Database Engine
+# ==========================
+
+DATABASE_URL = Config.DATABASE_URL
+
+
+# Fix PostgreSQL async driver compatibility
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://",
+        "postgresql+asyncpg://",
+        1
+    )
+
+
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=Config.DB_ECHO,
+    pool_size=Config.DB_POOL_SIZE,
+    pool_timeout=Config.DB_POOL_TIMEOUT,
+    pool_pre_ping=True,
+)
+
+
+# ==========================
+# Session Factory
+# ==========================
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+def get_session_maker():
     """
-    Dependency generator function that yields an AsyncSession.
-    Provides automatic commit on success, automatic rollback on error,
-    and ensures session closure after operation completion.
-    
-    Usage Pattern:
-        async for session in get_session():
-            # Perform DB Operations
+    Returns async database session factory.
     """
-    session_factory = get_session_factory()
-    
-    async with session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except SQLAlchemyError as e:
-            await session.rollback()
-            logger.error(f"Database Session Transaction Error: {type(e).__name__}")
-            raise
-        except Exception as e:
-            await session.rollback()
-            logger.error(f"Unexpected error during session lifecycle: {type(e).__name__}")
-            raise
-        finally:
-            await session.close()
+    return AsyncSessionLocal
 
 
-async def get_direct_session() -> AsyncSession:
-    """
-    Helper to return a raw AsyncSession instance.
-    Caller must manually handle commit, rollback, and session.close().
-    """
-    session_factory = get_session_factory()
-    return session_factory()
-  
+
+# ==========================
+# Database Initialize
+# ==========================
+
+async def init_db():
+
+    from database.models.base import Base
+
+
+    async with engine.begin() as conn:
+
+        await conn.run_sync(
+            Base.metadata.create_all
+        )
+
+
+    logger.info(
+        "Database initialized successfully."
+    )
+
+
+
+# ==========================
+# Database Shutdown
+# ==========================
+
+async def close_db():
+
+    await engine.dispose()
+
+    logger.info(
+        "Database connection closed."
+    )
