@@ -1,228 +1,169 @@
-# ==========================================================
-# P2P ESCROW MARKETPLACE BOT
-#
-# File    : config.py
-# Module  : Global Configuration
-# Version : V1.0.0
-#
-# Purpose :
-# Central configuration loader for Render / Production
-# Environment variables and bot settings.
-# ==========================================================
-
+import os
 from typing import List
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class Config(BaseSettings):
     """
-    Production configuration manager.
-    Loads values from environment variables or .env file.
-    Compatible with Python 3.12 + Pydantic v2.
+    Production Configuration Manager.
+    Compatible with:
+    - Python 3.12
+    - Pydantic v2
+    - Render Environment Variables
+    - .env file
     """
 
-    # ======================================================
+    # ==========================
     # Telegram Bot
-    # ======================================================
+    # ==========================
+    BOT_TOKEN: str = Field(...)
+    BOT_USERNAME: str = Field(default="")
 
-    BOT_TOKEN: str = Field(
-        ...,
-        description="Telegram Bot Token"
-    )
-
-    BOT_USERNAME: str = Field(
-        ...,
-        description="Telegram Bot Username without @"
-    )
-
-
-    # ======================================================
+    # ==========================
     # Database
-    # ======================================================
+    # ==========================
+    DATABASE_URL: str = Field(...)
 
-    DATABASE_URL: str = Field(
-        ...,
-        description="PostgreSQL Database URL"
-    )
+    DB_POOL_SIZE: int = Field(default=20)
+    DB_POOL_TIMEOUT: int = Field(default=30)
+    DB_ECHO: bool = Field(default=False)
 
+    # ==========================
+    # Owner / Admin
+    # ==========================
+    OWNER_ID: int = Field(...)
+    SUPPORT_ADMIN_ID: int = Field(...)
 
-    DB_POOL_SIZE: int = Field(
-        5,
-        description="Database connection pool size"
-    )
+    # ==========================
+    # Security
+    # ==========================
+    SECRET_KEY: str = Field(...)
 
-    DB_POOL_TIMEOUT: int = Field(
-        20,
-        description="Database pool timeout"
-    )
+    LOGIN_PIN_LENGTH: int = Field(default=4)
+    MAX_WRONG_PIN_ATTEMPTS: int = Field(default=3)
+    TEMPORARY_LOCK_TIME_MINUTES: int = Field(default=15)
 
-    DB_ECHO: bool = Field(
-        False,
-        description="Enable SQL query logging"
-    )
-
-
-    # ======================================================
-    # Admin / Security
-    # ======================================================
-
-    OWNER_ID: int = Field(
-        ...,
-        description="Main owner Telegram ID"
-    )
-
-
-    SUPPORT_ADMIN_ID: int = Field(
-        ...,
-        description="Support admin Telegram ID"
-    )
-
-
-    SECRET_KEY: str = Field(
-        ...,
-        description="Application secret key"
-    )
-
-
-    MAX_WRONG_PIN_ATTEMPTS: int = Field(
-        3
-    )
-
-
-    PIN_LOCK_TIME_MINUTES: int = Field(
-        15
-    )
-
-
-    # ======================================================
+    # ==========================
     # Bot Settings
-    # ======================================================
-
-    PARSE_MODE: str = "HTML"
-
-    DEFAULT_LANGUAGE: str = "bn"
+    # ==========================
+    PARSE_MODE: str = Field(default="HTML")
+    DEFAULT_LANGUAGE: str = Field(default="bn")
 
     SUPPORTED_LANGUAGES: List[str] = Field(
-        default_factory=lambda: [
-            "bn",
-            "en"
-        ]
+        default_factory=lambda: ["bn", "en"]
     )
 
-    TIMEZONE: str = "Asia/Dhaka"
+    TIMEZONE: str = Field(
+        default="Asia/Dhaka"
+    )
 
+    # ==========================
+    # Channel Force Join
+    # ==========================
+    REQUIRED_CHANNEL: str = Field(default="")
 
+    CHANNEL_1: str = Field(default="")
+    CHANNEL_2: str = Field(default="")
 
-    # ======================================================
+    # ==========================
     # Marketplace
-    # ======================================================
+    # ==========================
+    MARKETPLACE_NAME: str = Field(
+        default="Digital Marketplace"
+    )
 
-    MARKETPLACE_NAME: str = "P2P Digital Marketplace"
+    CURRENCY: str = Field(
+        default="BDT"
+    )
 
-    CURRENCY: str = "BDT"
+    DEFAULT_COMMISSION_PERCENT: float = Field(
+        default=5.0
+    )
 
+    MIN_DEPOSIT: float = Field(
+        default=50.0
+    )
 
-    DEFAULT_COMMISSION_PERCENT: float = 5.0
+    MIN_WITHDRAW: float = Field(
+        default=100.0
+    )
 
+    MAX_WITHDRAW: float = Field(
+        default=25000.0
+    )
 
-    MIN_DEPOSIT: float = 50.0
-
-
-    MIN_WITHDRAW: float = 100.0
-
-
-    MAX_WITHDRAW: float = 25000.0
-
-
-
-    # ======================================================
+    # ==========================
     # Wallet System
-    # ======================================================
+    # ==========================
+    WALLET_ENABLED: bool = Field(default=True)
+    BALANCE_TRANSFER_ENABLED: bool = Field(default=True)
+    DEPOSIT_ENABLED: bool = Field(default=True)
+    WITHDRAW_ENABLED: bool = Field(default=True)
 
-    WALLET_ENABLED: bool = True
+    # ==========================
+    # Payment Methods
+    # ==========================
+    PAYMENT_BKASH_ENABLED: bool = Field(default=True)
+    PAYMENT_NAGAD_ENABLED: bool = Field(default=True)
+    PAYMENT_ROCKET_ENABLED: bool = Field(default=False)
 
-    DEPOSIT_ENABLED: bool = True
+    PAYMENT_BINANCE_PAY_ENABLED: bool = Field(default=True)
 
-    WITHDRAW_ENABLED: bool = True
+    PAYMENT_USDT_TRC20_ENABLED: bool = Field(default=True)
+    PAYMENT_USDT_BEP20_ENABLED: bool = Field(default=True)
+    PAYMENT_USDT_SOLANA_ENABLED: bool = Field(default=False)
 
-    TRANSFER_ENABLED: bool = True
-
-
-
-    # ======================================================
-    # Payment Gateway Flags
-    # ======================================================
-
-    PAYMENT_BKASH_ENABLED: bool = True
-
-    PAYMENT_NAGAD_ENABLED: bool = True
-
-    PAYMENT_ROCKET_ENABLED: bool = False
-
-    PAYMENT_BINANCE_PAY_ENABLED: bool = True
-
-    PAYMENT_USDT_ENABLED: bool = True
-
-
-
-    # ======================================================
+    # ==========================
     # Escrow
-    # ======================================================
+    # ==========================
+    ESCROW_ENABLED: bool = Field(default=True)
 
-    ESCROW_ENABLED: bool = True
+    ESCROW_AUTO_RELEASE_HOURS: int = Field(
+        default=24
+    )
 
+    ESCROW_DISPUTE_TIME_LIMIT_HOURS: int = Field(
+        default=48
+    )
 
-    ESCROW_AUTO_RELEASE_HOURS: int = 24
+    ESCROW_AUTO_CANCEL_HOURS: int = Field(
+        default=12
+    )
 
+    # ==========================
+    # Referral
+    # ==========================
+    REFERRAL_ENABLED: bool = Field(default=True)
+    REFERRAL_BONUS_ENABLED: bool = Field(default=True)
 
-    ESCROW_DISPUTE_LIMIT_HOURS: int = 48
+    DEFAULT_REFERRAL_BONUS_AMOUNT: float = Field(
+        default=10.0
+    )
 
-
-
-    # ======================================================
-    # Channel Subscription
-    # ======================================================
-
-    REQUIRED_CHANNEL: str = ""
-
-
-
-    # ======================================================
+    # ==========================
     # Logging
-    # ======================================================
+    # ==========================
+    LOG_LEVEL: str = Field(default="INFO")
+    LOG_FILE_NAME: str = Field(default="bot.log")
 
-    LOG_LEVEL: str = "INFO"
+    CONSOLE_LOGGING: bool = Field(default=True)
+    FILE_LOGGING: bool = Field(default=True)
 
-    LOG_FILE_NAME: str = "bot.log"
-
-
-    # ======================================================
+    # ==========================
     # Environment
-    # ======================================================
+    # ==========================
+    DEBUG: bool = Field(default=False)
+    IS_PRODUCTION: bool = Field(default=True)
 
-    DEBUG: bool = False
-
-    IS_PRODUCTION: bool = True
-
-
-
-    # ======================================================
-    # Pydantic Config
-    # ======================================================
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"
+        extra="ignore",
     )
 
 
-
-# ==========================================================
 # Global Config Instance
-# ==========================================================
-
-Config = Settings()
+Config = Config()
