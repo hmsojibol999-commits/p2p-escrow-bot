@@ -6,6 +6,7 @@ from sqlalchemy import (
     Numeric,
     Enum,
     ForeignKey,
+    BigInteger,
 )
 
 from sqlalchemy.orm import (
