@@ -1,4 +1,3 @@
-
 import enum
 from datetime import datetime
 from decimal import Decimal
@@ -176,4 +175,3 @@ class Deposit(BaseModel):
             f"<Deposit(id={self.id}, deposit_id='{self.deposit_id}', "
             f"user_id={self.user_id}, amount={self.amount}, status='{self.status.value}')>"
         )
-      
