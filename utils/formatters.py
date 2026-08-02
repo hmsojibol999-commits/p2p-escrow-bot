@@ -1,30 +1,39 @@
 from decimal import Decimal
+from datetime import datetime
 from typing import Optional
 
 
 class TextFormatters:
     """
-    Utility class for formatting currency, numbers, text truncation,
-    and Telegram markdown sanitization.
+    Utility class for formatting currency, numbers, dates, text truncation,
+    Telegram markdown sanitization, and user mentions across the bot.
     """
 
     @staticmethod
-    def format_currency(amount: Decimal, currency_symbol: str = "BDT") -> str:
+    def format_currency(amount: Decimal | float | int, currency: str = "BDT") -> str:
         """
-        Formats a Decimal amount into a readable currency string with comma separators.
-        Example: 1500.5 -> "1,500.50 BDT"
+        Formats a numeric amount into a clean currency string with comma separators (e.g., 1,500.00 BDT).
         """
         try:
-            dec_val = Decimal(str(amount))
-            formatted_num = f"{dec_val:,.2f}"
-            return f"{formatted_num} {currency_symbol}"
+            dec_amount = Decimal(str(amount))
+            formatted_num = f"{dec_amount:,.2f}"
+            return f"{formatted_num} {currency.upper()}"
         except Exception:
-            return f"0.00 {currency_symbol}"
+            return f"0.00 {currency.upper()}"
+
+    @staticmethod
+    def format_date(dt: Optional[datetime], format_str: str = "%d-%m-%Y %H:%M") -> str:
+        """
+        Formats a datetime object into a user-friendly string format.
+        """
+        if not dt:
+            return "N/A"
+        return dt.strftime(format_str)
 
     @staticmethod
     def truncate_text(text: Optional[str], max_length: int = 50) -> str:
         """
-        Truncates long strings to a specified maximum length and appends ellipsis.
+        Truncates long text strings with ellipses if they exceed the maximum length.
         """
         if not text:
             return ""
@@ -47,10 +56,10 @@ class TextFormatters:
         return escaped
 
     @staticmethod
-    def format_user_mention(user_id: int, full_name: str) -> str:
+    def format_user_mention(user_id: int, full_name: Optional[str]) -> str:
         """
         Generates an HTML-style clickable user mention for Telegram messages.
         """
-        safe_name = full_name.replace("<", "<").replace(">", ">") if full_name else "User"
+        safe_name = full_name.replace("<", "&lt;").replace(">", "&gt;") if full_name else "User"
         return f"<a href='tg://user?id={user_id}'>{safe_name}</a>"
-      
+        
