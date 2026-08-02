@@ -31,6 +31,7 @@ class TransactionType(str, enum.Enum):
     TRANSFER_RECEIVE = "TRANSFER_RECEIVE"
     PURCHASE = "PURCHASE"
     SALE = "SALE"
+    SALE_PAYMENT = "SALE_PAYMENT"
     COMMISSION = "COMMISSION"
     REFUND = "REFUND"
     ESCROW_HOLD = "ESCROW_HOLD"
@@ -47,6 +48,7 @@ class TransactionStatus(str, enum.Enum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
     REJECTED = "REJECTED"
+    REFUNDED = "REFUNDED"
 
 
 class CreatedByType(str, enum.Enum):
@@ -57,9 +59,11 @@ class CreatedByType(str, enum.Enum):
 
 class Transaction(BaseModel):
     """
-    Transaction Database Model.
-    Records all monetary movements (Deposits, Withdrawals, Escrows, Purchases, Admin Adjustments).
-    Financial history is immutable to prevent corruption or silent deletion.
+    Financial Transaction Ledger Core Model.
+    Records every single monetary event across the marketplace (Deposits, Withdrawals,
+    P2P Transfers, Purchases, Escrow Operations, Commission, and Admin Adjustments).
+    
+    Designed to be IMMUTABLE — records must never be deleted or altered directly.
     """
 
     __tablename__ = "transactions"
@@ -72,21 +76,21 @@ class Transaction(BaseModel):
         unique=True,
         index=True,
         nullable=False,
-        description="Unique system-generated transaction identifier",
+        description="Unique system-generated transaction identifier (e.g. TXN-XXXXXXXX)",
     )
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
-        description="Foreign key to users table",
+        description="Foreign key referencing users table primary key",
     )
     wallet_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("wallets.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
-        description="Foreign key to wallets table",
+        description="Foreign key referencing wallets table primary key",
     )
 
     # ------------------------------------------------------------------
@@ -96,14 +100,14 @@ class Transaction(BaseModel):
         SQLEnum(TransactionType, name="transaction_type_enum"),
         index=True,
         nullable=False,
-        description="Type of financial transaction",
+        description="Categorization of the ledger entry",
     )
     status: Mapped[TransactionStatus] = mapped_column(
         SQLEnum(TransactionStatus, name="transaction_status_enum"),
         default=TransactionStatus.PENDING,
         index=True,
         nullable=False,
-        description="Current transaction processing state",
+        description="Current state of the transaction lifecycle",
     )
 
     # ------------------------------------------------------------------
@@ -112,7 +116,7 @@ class Transaction(BaseModel):
     amount: Mapped[Decimal] = mapped_column(
         SQLDecimal(precision=18, scale=2),
         nullable=False,
-        description="Gross transaction amount",
+        description="Gross monetary value of the transaction (Decimal strictly enforced)",
     )
     fee: Mapped[Decimal] = mapped_column(
         SQLDecimal(precision=18, scale=2),
@@ -126,11 +130,14 @@ class Transaction(BaseModel):
         description="Net amount after fee calculation",
     )
     currency: Mapped[str] = mapped_column(
-        String(10), default="BDT", nullable=False, description="Currency code"
+        String(10),
+        default="BDT",
+        nullable=False,
+        description="Currency code associated with the entry",
     )
 
     # ------------------------------------------------------------------
-    # 4. PAYMENT GATEWAY / EXTERNAL DATA
+    # 4. PAYMENT GATEWAY & EXTERNAL DATA
     # ------------------------------------------------------------------
     payment_method: Mapped[Optional[str]] = mapped_column(
         String(50),
@@ -138,17 +145,24 @@ class Transaction(BaseModel):
         description="Payment method used (e.g. bKash, Nagad, Binance, USDT)",
     )
     external_transaction_id: Mapped[Optional[str]] = mapped_column(
-        String(128),
-        nullable=True,
+        String(255),
         index=True,
+        nullable=True,
         description="External gateway Transaction ID or Blockchain Hash",
     )
 
     # ------------------------------------------------------------------
-    # 5. DESCRIPTION & AUDIT TRAILS
+    # 5. DESCRIPTION, AUDIT TRAILS & NOTES
     # ------------------------------------------------------------------
     description: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, description="Human-readable description or remarks"
+        Text,
+        nullable=True,
+        description="Human-readable ledger remark or automated system narration",
+    )
+    admin_note: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        description="Admin justification or audit logs in case of manual adjustment",
     )
     created_by: Mapped[CreatedByType] = mapped_column(
         SQLEnum(CreatedByType, name="created_by_enum"),
@@ -162,7 +176,9 @@ class Transaction(BaseModel):
         description="Telegram Admin User ID who approved/handled this transaction",
     )
     ip_address: Mapped[Optional[str]] = mapped_column(
-        String(45), nullable=True, description="IP address for security audit"
+        String(45),
+        nullable=True,
+        description="IP address for security audit",
     )
     metadata_info: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON,
@@ -177,16 +193,19 @@ class Transaction(BaseModel):
     wallet: Mapped["Wallet"] = relationship("Wallet", backref="transactions")
 
     # ------------------------------------------------------------------
-    # INDEXES FOR OPTIMIZED QUERYING
+    # INDEXES FOR OPTIMIZED QUERYING & REPORTING
     # ------------------------------------------------------------------
     __table_args__ = (
         Index("idx_user_status", "user_id", "status"),
         Index("idx_type_status", "transaction_type", "status"),
+        Index("idx_txn_user_type_status", "user_id", "transaction_type", "status"),
+        Index("idx_txn_wallet_created", "wallet_id", "created_at"),
     )
 
     def __repr__(self) -> str:
         return (
-            f"<Transaction(id={self.id}, tx_id='{self.transaction_id}', "
-            f"type='{self.transaction_type.value}', amount={self.amount}, status='{self.status.value}')>"
-  )
-      
+            f"<Transaction(id={self.id}, transaction_id='{self.transaction_id}', "
+            f"user_id={self.user_id}, type='{self.transaction_type.value}', "
+            f"amount={self.amount}, status='{self.status.value}')>"
+        )
+        
