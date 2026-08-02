@@ -1,4 +1,14 @@
-import os
+# ==========================================================
+# config.py
+#
+# Project Configuration Module
+# Compatible with:
+# Python 3.12
+# Aiogram 3.x
+# Pydantic v2
+# Render Environment Variables
+# ==========================================================
+
 from typing import List
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -6,164 +16,213 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Config(BaseSettings):
     """
-    Production Configuration Manager.
-    Compatible with:
-    - Python 3.12
-    - Pydantic v2
-    - Render Environment Variables
-    - .env file
+    Global application configuration.
+    Loads values from .env file or Render Environment Variables.
     """
 
-    # ==========================
-    # Telegram Bot
-    # ==========================
-    BOT_TOKEN: str = Field(...)
-    BOT_USERNAME: str = Field(default="")
+    # ======================================================
+    # ENVIRONMENT
+    # ======================================================
 
-    # ==========================
-    # Database
-    # ==========================
-    DATABASE_URL: str = Field(...)
+    BOT_TOKEN: str = Field(..., description="Telegram Bot Token")
+    BOT_USERNAME: str = Field("", description="Telegram Bot Username")
 
-    DB_POOL_SIZE: int = Field(default=20)
-    DB_POOL_TIMEOUT: int = Field(default=30)
-    DB_ECHO: bool = Field(default=False)
+    DATABASE_URL: str = Field(..., description="PostgreSQL Database URL")
 
-    # ==========================
-    # Owner / Admin
-    # ==========================
-    OWNER_ID: int = Field(...)
-    SUPPORT_ADMIN_ID: int = Field(...)
+    DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
 
-    # ==========================
-    # Security
-    # ==========================
-    SECRET_KEY: str = Field(...)
+    OWNER_ID: int = Field(..., description="Main Owner Telegram ID")
+    SUPPORT_ADMIN_ID: int = Field(..., description="Support Admin Telegram ID")
 
-    LOGIN_PIN_LENGTH: int = Field(default=4)
-    MAX_WRONG_PIN_ATTEMPTS: int = Field(default=3)
-    TEMPORARY_LOCK_TIME_MINUTES: int = Field(default=15)
+    SECRET_KEY: str = Field(..., description="Security Secret Key")
 
-    # ==========================
-    # Bot Settings
-    # ==========================
-    PARSE_MODE: str = Field(default="HTML")
-    DEFAULT_LANGUAGE: str = Field(default="bn")
-
-    SUPPORTED_LANGUAGES: List[str] = Field(
-        default_factory=lambda: ["bn", "en"]
+    REQUIRED_CHANNEL: str = Field(
+        "",
+        description="Force subscription channel"
     )
 
-    TIMEZONE: str = Field(
-        default="Asia/Dhaka"
-    )
 
-    # ==========================
-    # Channel Force Join
-    # ==========================
-    REQUIRED_CHANNEL: str = Field(default="")
+    # ======================================================
+    # ROLE SETTINGS
+    # ======================================================
 
-    CHANNEL_1: str = Field(default="")
-    CHANNEL_2: str = Field(default="")
+    ROLE_OWNER: str = "OWNER"
+    ROLE_SUPPORT_ADMIN: str = "SUPPORT_ADMIN"
+    ROLE_USER: str = "USER"
 
-    # ==========================
-    # Marketplace
-    # ==========================
-    MARKETPLACE_NAME: str = Field(
-        default="Digital Marketplace"
-    )
 
-    CURRENCY: str = Field(
-        default="BDT"
-    )
+    # ======================================================
+    # DATABASE
+    # ======================================================
 
-    DEFAULT_COMMISSION_PERCENT: float = Field(
-        default=5.0
-    )
+    DB_POOL_SIZE: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    DB_AUTO_RECONNECT: bool = True
+    DB_ECHO: bool = False
 
-    MIN_DEPOSIT: float = Field(
-        default=50.0
-    )
 
-    MIN_WITHDRAW: float = Field(
-        default=100.0
-    )
+    # ======================================================
+    # BOT SETTINGS
+    # ======================================================
 
-    MAX_WITHDRAW: float = Field(
-        default=25000.0
-    )
+    PARSE_MODE: str = "HTML"
 
-    # ==========================
-    # Wallet System
-    # ==========================
-    WALLET_ENABLED: bool = Field(default=True)
-    BALANCE_TRANSFER_ENABLED: bool = Field(default=True)
-    DEPOSIT_ENABLED: bool = Field(default=True)
-    WITHDRAW_ENABLED: bool = Field(default=True)
+    DEFAULT_LANGUAGE: str = "bn"
 
-    # ==========================
-    # Payment Methods
-    # ==========================
-    PAYMENT_BKASH_ENABLED: bool = Field(default=True)
-    PAYMENT_NAGAD_ENABLED: bool = Field(default=True)
-    PAYMENT_ROCKET_ENABLED: bool = Field(default=False)
+    SUPPORTED_LANGUAGES: List[str] = [
+        "bn",
+        "en"
+    ]
 
-    PAYMENT_BINANCE_PAY_ENABLED: bool = Field(default=True)
+    TIMEZONE: str = "Asia/Dhaka"
 
-    PAYMENT_USDT_TRC20_ENABLED: bool = Field(default=True)
-    PAYMENT_USDT_BEP20_ENABLED: bool = Field(default=True)
-    PAYMENT_USDT_SOLANA_ENABLED: bool = Field(default=False)
 
-    # ==========================
-    # Escrow
-    # ==========================
-    ESCROW_ENABLED: bool = Field(default=True)
+    # ======================================================
+    # MARKETPLACE
+    # ======================================================
 
-    ESCROW_AUTO_RELEASE_HOURS: int = Field(
-        default=24
-    )
+    MARKETPLACE_NAME: str = "Digital Marketplace"
 
-    ESCROW_DISPUTE_TIME_LIMIT_HOURS: int = Field(
-        default=48
-    )
+    CURRENCY: str = "BDT"
 
-    ESCROW_AUTO_CANCEL_HOURS: int = Field(
-        default=12
-    )
+    DEFAULT_COMMISSION_PERCENT: float = 5.0
 
-    # ==========================
-    # Referral
-    # ==========================
-    REFERRAL_ENABLED: bool = Field(default=True)
-    REFERRAL_BONUS_ENABLED: bool = Field(default=True)
+    MIN_DEPOSIT: float = 50.0
 
-    DEFAULT_REFERRAL_BONUS_AMOUNT: float = Field(
-        default=10.0
-    )
+    MIN_WITHDRAW: float = 100.0
 
-    # ==========================
-    # Logging
-    # ==========================
-    LOG_LEVEL: str = Field(default="INFO")
-    LOG_FILE_NAME: str = Field(default="bot.log")
+    MAX_WITHDRAW: float = 25000.0
 
-    CONSOLE_LOGGING: bool = Field(default=True)
-    FILE_LOGGING: bool = Field(default=True)
+    MAX_PRODUCT_UPLOAD_SIZE_MB: int = 50
 
-    # ==========================
-    # Environment
-    # ==========================
-    DEBUG: bool = Field(default=False)
-    IS_PRODUCTION: bool = Field(default=True)
+    MAX_FILE_SIZE_MB: int = 100
 
+
+    ALLOWED_FILE_EXTENSIONS: List[str] = [
+        "zip",
+        "rar",
+        "txt",
+        "pdf",
+        "jpg",
+        "png",
+        "json"
+    ]
+
+
+    # ======================================================
+    # WALLET
+    # ======================================================
+
+    WALLET_ENABLED: bool = True
+
+    BALANCE_TRANSFER_ENABLED: bool = True
+
+    DEPOSIT_ENABLED: bool = True
+
+    WITHDRAW_ENABLED: bool = True
+
+
+    # ======================================================
+    # PAYMENT METHODS
+    # ======================================================
+
+    PAYMENT_BKASH_ENABLED: bool = True
+
+    PAYMENT_NAGAD_ENABLED: bool = True
+
+    PAYMENT_ROCKET_ENABLED: bool = False
+
+    PAYMENT_BINANCE_PAY_ENABLED: bool = True
+
+    PAYMENT_USDT_TRC20_ENABLED: bool = True
+
+    PAYMENT_USDT_BEP20_ENABLED: bool = True
+
+    PAYMENT_USDT_SOLANA_ENABLED: bool = False
+
+
+    # ======================================================
+    # SECURITY
+    # ======================================================
+
+    LOGIN_PIN_LENGTH: int = 4
+
+    MAX_WRONG_PIN_ATTEMPTS: int = 3
+
+    TEMPORARY_LOCK_TIME_MINUTES: int = 15
+
+    SESSION_TIMEOUT_MINUTES: int = 60
+
+    RATE_LIMIT_MESSAGES_PER_SEC: float = 1.5
+
+    MAX_LOGIN_ATTEMPTS: int = 5
+
+
+    # ======================================================
+    # ESCROW
+    # ======================================================
+
+    ESCROW_ENABLED: bool = True
+
+    ESCROW_AUTO_RELEASE_HOURS: int = 24
+
+    ESCROW_DISPUTE_TIME_LIMIT_HOURS: int = 48
+
+    ESCROW_AUTO_CANCEL_HOURS: int = 12
+
+
+    # ======================================================
+    # REFERRAL
+    # ======================================================
+
+    REFERRAL_ENABLED: bool = True
+
+    REFERRAL_BONUS_ENABLED: bool = True
+
+    DEFAULT_REFERRAL_BONUS_AMOUNT: float = 10.0
+
+
+    # ======================================================
+    # RATING
+    # ======================================================
+
+    RATING_ENABLED: bool = True
+
+    MIN_RATING: int = 1
+
+    MAX_RATING: int = 5
+
+
+    # ======================================================
+    # LOGGING
+    # ======================================================
+
+    LOG_FILE_NAME: str = "bot.log"
+
+    CONSOLE_LOGGING: bool = True
+
+    FILE_LOGGING: bool = True
+
+
+    # ======================================================
+    # PRODUCTION
+    # ======================================================
+
+    IS_PRODUCTION: bool = True
+
+
+    # ======================================================
+    # PYDANTIC CONFIG
+    # ======================================================
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore",
+        extra="ignore"
     )
 
 
-# Global Config Instance
-Config = Config()
+# Global config object
+config = Config()
