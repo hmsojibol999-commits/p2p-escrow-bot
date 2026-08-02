@@ -1,62 +1,54 @@
-from datetime import datetime
-from typing import Any
-from sqlalchemy import DateTime, Integer, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from datetime import datetime, timezone
+
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+)
+
+from sqlalchemy import (
+    DateTime,
+    Integer,
+)
 
 
 class Base(DeclarativeBase):
     """
-    SQLAlchemy 2.x Declarative Base Class.
-    All database models will inherit from this Base class.
-    Compatible with Alembic migrations and async database sessions.
+    SQLAlchemy Base Class.
+    All database models inherit from this class.
     """
-
     pass
 
 
-class BaseModel(Base):
+
+class TimestampMixin:
     """
-    Abstract Base Model offering common column fields, timezone-aware timestamps,
-    and string representation for debugging and logging.
+    Automatic created_at and updated_at fields
+    for all database tables.
     """
 
-    __abstract__ = True
-
-    # 1. Primary Key: Auto-incrementing Integer ID
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True, index=True
-    )
-
-    # 2. Created Time: Auto-populated on creation
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
-        description="Timestamp when the record was created",
     )
 
-    # 3. Updated Time: Auto-populated on creation and auto-updated on change
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
-        description="Timestamp when the record was last updated",
     )
 
-    def __repr__(self) -> str:
-        """
-        Clean, informative dynamic string representation for debugging and logging.
-        Automatically prints class name and primary ID.
-        """
-        return f"<{self.__class__.__name__}(id={self.id})>"
 
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Helper method to convert model instance attributes into a python dictionary.
-        """
-        return {
-            column.name: getattr(self, column.name)
-            for column in self.__table__.columns
-        }
-        
+
+class IDMixin:
+    """
+    Universal integer primary key.
+    """
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
