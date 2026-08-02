@@ -1,4 +1,3 @@
-
 import logging
 from typing import Optional
 from sqlalchemy import text
@@ -119,4 +118,3 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     if AsyncSessionFactory is None:
         raise RuntimeError("Database session factory is not initialized. Call init_database() first.")
     return AsyncSessionFactory
-
