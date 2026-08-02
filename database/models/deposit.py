@@ -1,198 +1,150 @@
-import enum
-from datetime import datetime
 from decimal import Decimal
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
+
 from sqlalchemy import (
-    BigInteger,
-    DateTime,
-    Enum as SQLEnum,
-    ForeignKey,
-    Index,
-    Numeric as SQLDecimal,
     String,
-    Text,
+    Numeric,
+    Enum,
+    ForeignKey,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# File 004 (database/base.py) থেকে BaseModel ইমপোর্ট
-from database.base import BaseModel
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
-if TYPE_CHECKING:
-    from database.models.user import User
-    from database.models.wallet import Wallet
+from database.models.base import (
+    Base,
+    IDMixin,
+    TimestampMixin,
+)
+
+import enum
+
+from datetime import datetime
 
 
-# ------------------------------------------------------------------
-# ENUMS FOR PAYMENT METHODS, PROOF STATUS & DEPOSIT STATUS
-# ------------------------------------------------------------------
-class PaymentMethodType(str, enum.Enum):
+
+class PaymentMethod(str, enum.Enum):
+
     BKASH = "BKASH"
+
     NAGAD = "NAGAD"
+
     ROCKET = "ROCKET"
-    BINANCE = "BINANCE"
-    USDT = "USDT"
 
+    BINANCE_PAY = "BINANCE_PAY"
 
-class ProofStatus(str, enum.Enum):
-    NOT_SUBMITTED = "NOT_SUBMITTED"
-    SUBMITTED = "SUBMITTED"
-    VERIFIED = "VERIFIED"
-    REJECTED = "REJECTED"
+    CRYPTO = "CRYPTO"
+
 
 
 class DepositStatus(str, enum.Enum):
+
     PENDING = "PENDING"
+
     APPROVED = "APPROVED"
+
     REJECTED = "REJECTED"
-    CANCELLED = "CANCELLED"
 
 
-class Deposit(BaseModel):
+
+class Deposit(
+    Base,
+    IDMixin,
+    TimestampMixin
+):
+
     """
-    Deposit Request Database Model.
-    Tracks user deposit requests, payment methods, transaction references,
-    screenshot proofs, wallet links, and admin approval workflows.
+    User Deposit Request Model.
+    Handles manual and crypto deposit verification.
     """
+
 
     __tablename__ = "deposits"
 
-    # ------------------------------------------------------------------
-    # 1. BASIC IDENTIFIERS & FOREIGN KEYS
-    # ------------------------------------------------------------------
+
+
     deposit_id: Mapped[str] = mapped_column(
         String(64),
         unique=True,
         index=True,
         nullable=False,
-        description="Unique system-generated deposit identifier (e.g., DEP-XXXXXXXX)",
-    )
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"),
-        index=True,
-        nullable=False,
-        description="Foreign key referencing users table primary key",
-    )
-    wallet_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("wallets.id", ondelete="RESTRICT"),
-        index=True,
-        nullable=False,
-        description="Foreign key referencing wallets table primary key",
     )
 
-    # ------------------------------------------------------------------
-    # 2. DEPOSIT AMOUNT & CURRENCY
-    # ------------------------------------------------------------------
-    amount: Mapped[Decimal] = mapped_column(
-        SQLDecimal(precision=18, scale=2),
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE"
+        ),
         nullable=False,
-        description="Requested deposit amount in Decimal format",
+        index=True,
     )
+
+
+    payment_method: Mapped[PaymentMethod] = mapped_column(
+        Enum(PaymentMethod),
+        nullable=False,
+    )
+
+
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(18,2),
+        nullable=False,
+    )
+
+
     currency: Mapped[str] = mapped_column(
         String(10),
         default="BDT",
         nullable=False,
-        description="Currency code associated with the entry",
     )
 
-    # ------------------------------------------------------------------
-    # 3. PAYMENT METHOD & SENDER INFO
-    # ------------------------------------------------------------------
-    payment_method: Mapped[PaymentMethodType] = mapped_column(
-        SQLEnum(PaymentMethodType, name="payment_method_enum"),
-        index=True,
-        nullable=False,
-        description="Payment gateway method used (BKASH, NAGAD, ROCKET, BINANCE, USDT)",
-    )
-    sender_number: Mapped[Optional[str]] = mapped_column(
+
+    transaction_id_claim: Mapped[str] = mapped_column(
         String(100),
-        nullable=True,
-        description="Sender phone number, wallet address or Binance ID",
-    )
-    masked_account_number: Mapped[Optional[str]] = mapped_column(
-        String(50),
-        nullable=True,
-        description="Masked version of sender account for safe user display (e.g., 017****1234)",
-    )
-
-    # ------------------------------------------------------------------
-    # 4. TRANSACTION VERIFICATION & PROOF
-    # ------------------------------------------------------------------
-    transaction_reference: Mapped[str] = mapped_column(
-        String(255),
         unique=True,
         index=True,
         nullable=False,
-        description="Unique external gateway transaction ID / Hash (TrxID) to prevent duplicates",
-    )
-    payment_screenshot: Mapped[Optional[str]] = mapped_column(
-        String(500),
-        nullable=True,
-        description="Telegram File ID or URL path of payment screenshot proof",
-    )
-    proof_status: Mapped[ProofStatus] = mapped_column(
-        SQLEnum(ProofStatus, name="proof_status_enum"),
-        default=ProofStatus.NOT_SUBMITTED,
-        nullable=False,
-        description="Screenshot/Proof verification state",
     )
 
-    # ------------------------------------------------------------------
-    # 5. DEPOSIT STATUS & ADMIN PROCESSING
-    # ------------------------------------------------------------------
-    status: Mapped[DepositStatus] = mapped_column(
-        SQLEnum(DepositStatus, name="deposit_status_enum"),
-        default=DepositStatus.PENDING,
-        index=True,
-        nullable=False,
-        description="Overall approval status of deposit request",
+
+    sender_account_number: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
     )
+
+
+    status: Mapped[DepositStatus] = mapped_column(
+        Enum(DepositStatus),
+        default=DepositStatus.PENDING,
+        nullable=False,
+    )
+
+
     approved_by: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         nullable=True,
-        description="Telegram ID of the admin who processed this deposit",
     )
-    approved_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
+
+
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
         nullable=True,
-        description="Timestamp when deposit was approved/rejected",
-    )
-    admin_note: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        description="Remarks or rejection reason from Admin",
     )
 
-    # ------------------------------------------------------------------
-    # 6. RELATIONSHIPS
-    # ------------------------------------------------------------------
-    user: Mapped["User"] = relationship("User", backref="deposits")
-    wallet: Mapped["Wallet"] = relationship("Wallet", backref="deposits")
 
-    # ------------------------------------------------------------------
-    # HELPER METHOD TO MASK SENDER NUMBER FOR SECURITY
-    # ------------------------------------------------------------------
-    @property
-    def masked_sender_number(self) -> str:
-        """Returns masked sender phone number for safe display (e.g., 01******789)."""
-        if not self.sender_number:
-            return "N/A"
-        if len(self.sender_number) >= 11:
-            return f"{self.sender_number[:2]}******{self.sender_number[-3:]}"
-        return self.sender_number
-
-    # ------------------------------------------------------------------
-    # INDEXES FOR OPTIMIZED QUERYING
-    # ------------------------------------------------------------------
-    __table_args__ = (
-        Index("idx_deposit_user_status", "user_id", "status"),
-        Index("idx_deposit_method_trx", "payment_method", "transaction_reference"),
+    user = relationship(
+        "User",
+        lazy="selectin",
     )
 
-    def __repr__(self) -> str:
+
+
+    def __repr__(self):
+
         return (
-            f"<Deposit(id={self.id}, deposit_id='{self.deposit_id}', "
-            f"user_id={self.user_id}, amount={self.amount}, status='{self.status.value}')>"
+            f"<Deposit id={self.id} "
+            f"status={self.status}>"
         )
-        
