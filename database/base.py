@@ -35,11 +35,12 @@ class BaseModel(Base):
         description="Timestamp when the record was created",
     )
 
-    # 3. Updated Time: Auto-populated on creation and auto-updated on change
+    # 3. Updated Time: Auto-populated on creation and auto-updated on modification
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+        default=func.now(),
         nullable=False,
         description="Timestamp when the record was last updated",
     )
