@@ -1,3 +1,14 @@
+# ==========================================================
+# main.py
+#
+# Telegram P2P Escrow Marketplace Bot
+#
+# Compatible:
+# Python 3.12
+# Aiogram 3.x
+# PostgreSQL + SQLAlchemy Async
+# ==========================================================
+
 import asyncio
 import logging
 import sys
@@ -6,6 +17,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+
 from config import Config
 
 from database.session import (
@@ -13,6 +25,8 @@ from database.session import (
     get_session_maker
 )
 
+
+# Middlewares
 from middlewares.db import DatabaseMiddleware
 from middlewares.throttling import ThrottlingMiddleware
 from middlewares.logging import RequestLoggingMiddleware
@@ -39,12 +53,12 @@ from handlers.admin.broadcast import router as admin_broadcast_router
 
 
 
-# ==========================
+# ==========================================================
 # Logging Setup
-# ==========================
+# ==========================================================
 
 logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL.upper()),
+    level=logging.INFO,
     format=(
         "%(asctime)s | "
         "%(levelname)s | "
@@ -60,32 +74,45 @@ logger = logging.getLogger("escrow_bot")
 
 
 
+# ==========================================================
+# Main Function
+# ==========================================================
+
 async def main():
 
-    logger.info("Starting Escrow Marketplace Bot...")
+    logger.info(
+        "🚀 Starting P2P Escrow Marketplace Bot..."
+    )
 
 
-    # --------------------------
+    # ------------------------------
+    # Load Config
+    # ------------------------------
+
+    if not Config.BOT_TOKEN:
+        logger.error(
+            "BOT_TOKEN missing!"
+        )
+        return
+
+
+    # ------------------------------
     # Database Initialize
-    # --------------------------
+    # ------------------------------
 
     await init_db()
 
     session_maker = get_session_maker()
 
 
-    # --------------------------
-    # Bot Initialize
-    # --------------------------
+    # ------------------------------
+    # Telegram Bot Initialize
+    # ------------------------------
 
     bot = Bot(
         token=Config.BOT_TOKEN,
         default=DefaultBotProperties(
-            parse_mode=(
-                ParseMode.HTML
-                if Config.PARSE_MODE == "HTML"
-                else ParseMode.MARKDOWN
-            )
+            parse_mode=ParseMode.HTML
         )
     )
 
@@ -93,10 +120,9 @@ async def main():
     dp = Dispatcher()
 
 
-
-    # --------------------------
+    # ------------------------------
     # Middleware Register
-    # --------------------------
+    # ------------------------------
 
     dp.update.middleware(
         RequestLoggingMiddleware()
@@ -105,8 +131,6 @@ async def main():
     dp.update.middleware(
         ThrottlingMiddleware(
             rate_limit=Config.RATE_LIMIT_MESSAGES_PER_SEC
-            if hasattr(Config, "RATE_LIMIT_MESSAGES_PER_SEC")
-            else 0.8
         )
     )
 
@@ -121,44 +145,56 @@ async def main():
     )
 
 
+    # ------------------------------
+    # User Routers
+    # ------------------------------
 
-    # --------------------------
-    # Include Routers
-    # --------------------------
+    dp.include_router(start_router)
 
-    user_routers = [
-        start_router,
-        wallet_router,
-        deposit_router,
-        withdraw_router,
-        transfer_router,
-        marketplace_router,
-        order_router,
-        support_router,
-    ]
+    dp.include_router(wallet_router)
 
+    dp.include_router(deposit_router)
 
-    admin_routers = [
-        admin_dashboard_router,
-        admin_deposits_router,
-        admin_withdrawals_router,
-        admin_disputes_router,
-        admin_broadcast_router,
-    ]
+    dp.include_router(withdraw_router)
 
+    dp.include_router(transfer_router)
 
-    for router in user_routers:
-        dp.include_router(router)
+    dp.include_router(marketplace_router)
 
+    dp.include_router(order_router)
 
-    for router in admin_routers:
-        dp.include_router(router)
+    dp.include_router(support_router)
 
 
 
-    # --------------------------
-    # Start Polling
-    # --------------------------
+    # ------------------------------
+    # Admin Routers
+    # ------------------------------
+
+    dp.include_router(
+        admin_dashboard_router
+    )
+
+    dp.include_router(
+        admin_deposits_router
+    )
+
+    dp.include_router(
+        admin_withdrawals_router
+    )
+
+    dp.include_router(
+        admin_disputes_router
+    )
+
+    dp.include_router(
+        admin_broadcast_router
+    )
+
+
+    # ------------------------------
+    # Start Bot
+    # ------------------------------
 
     await bot.delete_webhook(
         drop_pending_updates=True
@@ -166,13 +202,15 @@ async def main():
 
 
     logger.info(
-        "Bot is running successfully..."
+        "✅ Bot started successfully"
     )
 
 
     try:
 
-        await dp.start_polling(bot)
+        await dp.start_polling(
+            bot
+        )
 
 
     except Exception as e:
@@ -187,19 +225,25 @@ async def main():
         await bot.session.close()
 
         logger.info(
-            "Bot stopped."
+            "🛑 Bot shutdown complete"
         )
 
 
+
+# ==========================================================
+# Entry Point
+# ==========================================================
 
 if __name__ == "__main__":
 
     try:
 
-        asyncio.run(main())
+        asyncio.run(
+            main()
+        )
 
     except KeyboardInterrupt:
 
         logger.info(
-            "Shutdown requested."
+            "Bot stopped manually"
         )
