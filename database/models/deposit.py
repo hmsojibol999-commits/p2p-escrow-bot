@@ -19,10 +19,11 @@ from database.base import BaseModel
 
 if TYPE_CHECKING:
     from database.models.user import User
+    from database.models.wallet import Wallet
 
 
 # ------------------------------------------------------------------
-# ENUMS FOR DEPOSIT PAYMENT METHODS, PROOF STATUS & DEPOSIT STATUS
+# ENUMS FOR PAYMENT METHODS, PROOF STATUS & DEPOSIT STATUS
 # ------------------------------------------------------------------
 class PaymentMethodType(str, enum.Enum):
     BKASH = "BKASH"
@@ -50,7 +51,7 @@ class Deposit(BaseModel):
     """
     Deposit Request Database Model.
     Tracks user deposit requests, payment methods, transaction references,
-    screenshot proofs, and admin approval workflows.
+    screenshot proofs, wallet links, and admin approval workflows.
     """
 
     __tablename__ = "deposits"
@@ -63,14 +64,21 @@ class Deposit(BaseModel):
         unique=True,
         index=True,
         nullable=False,
-        description="Unique system-generated deposit request identifier",
+        description="Unique system-generated deposit identifier (e.g., DEP-XXXXXXXX)",
     )
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
-        description="Foreign key referencing users table",
+        description="Foreign key referencing users table primary key",
+    )
+    wallet_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("wallets.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+        description="Foreign key referencing wallets table primary key",
     )
 
     # ------------------------------------------------------------------
@@ -82,7 +90,10 @@ class Deposit(BaseModel):
         description="Requested deposit amount in Decimal format",
     )
     currency: Mapped[str] = mapped_column(
-        String(10), default="BDT", nullable=False, description="Currency code"
+        String(10),
+        default="BDT",
+        nullable=False,
+        description="Currency code associated with the entry",
     )
 
     # ------------------------------------------------------------------
@@ -92,28 +103,33 @@ class Deposit(BaseModel):
         SQLEnum(PaymentMethodType, name="payment_method_enum"),
         index=True,
         nullable=False,
-        description="Payment gateway method used",
+        description="Payment gateway method used (BKASH, NAGAD, ROCKET, BINANCE, USDT)",
     )
     sender_number: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
         description="Sender phone number, wallet address or Binance ID",
     )
+    masked_account_number: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        description="Masked version of sender account for safe user display (e.g., 017****1234)",
+    )
 
     # ------------------------------------------------------------------
     # 4. TRANSACTION VERIFICATION & PROOF
     # ------------------------------------------------------------------
     transaction_reference: Mapped[str] = mapped_column(
-        String(128),
+        String(255),
         unique=True,
         index=True,
         nullable=False,
-        description="Unique external gateway transaction ID (e.g. TrxID / Hash)",
+        description="Unique external gateway transaction ID / Hash (TrxID) to prevent duplicates",
     )
     payment_screenshot: Mapped[Optional[str]] = mapped_column(
-        String(255),
+        String(500),
         nullable=True,
-        description="File ID or URL path of payment screenshot proof",
+        description="Telegram File ID or URL path of payment screenshot proof",
     )
     proof_status: Mapped[ProofStatus] = mapped_column(
         SQLEnum(ProofStatus, name="proof_status_enum"),
@@ -143,13 +159,16 @@ class Deposit(BaseModel):
         description="Timestamp when deposit was approved/rejected",
     )
     admin_note: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, description="Remarks or rejection reason from Admin"
+        Text,
+        nullable=True,
+        description="Remarks or rejection reason from Admin",
     )
 
     # ------------------------------------------------------------------
     # 6. RELATIONSHIPS
     # ------------------------------------------------------------------
     user: Mapped["User"] = relationship("User", backref="deposits")
+    wallet: Mapped["Wallet"] = relationship("Wallet", backref="deposits")
 
     # ------------------------------------------------------------------
     # HELPER METHOD TO MASK SENDER NUMBER FOR SECURITY
@@ -168,6 +187,7 @@ class Deposit(BaseModel):
     # ------------------------------------------------------------------
     __table_args__ = (
         Index("idx_deposit_user_status", "user_id", "status"),
+        Index("idx_deposit_method_trx", "payment_method", "transaction_reference"),
     )
 
     def __repr__(self) -> str:
@@ -175,3 +195,4 @@ class Deposit(BaseModel):
             f"<Deposit(id={self.id}, deposit_id='{self.deposit_id}', "
             f"user_id={self.user_id}, amount={self.amount}, status='{self.status.value}')>"
         )
+        
