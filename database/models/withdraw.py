@@ -51,8 +51,8 @@ class WithdrawStatus(str, enum.Enum):
 class Withdraw(BaseModel):
     """
     Withdraw Request Database Model.
-    Stores withdrawal payout details, receiver account info, fee breakdowns,
-    crypto network specifications, and admin processing timestamps.
+    Manages user withdrawal requests, gateway payout details, fee breakdowns,
+    crypto network specifications, masked account displays, and admin logs.
     """
 
     __tablename__ = "withdraws"
@@ -65,21 +65,21 @@ class Withdraw(BaseModel):
         unique=True,
         index=True,
         nullable=False,
-        description="Unique system-generated payout request identifier",
+        description="Unique system withdrawal identifier (e.g., WTH-XXXXXXXX)",
     )
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
-        description="Foreign key referencing users table",
+        description="Foreign key referencing users table primary key",
     )
     wallet_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("wallets.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
-        description="Foreign key referencing wallets table",
+        description="Foreign key referencing wallets table primary key",
     )
 
     # ------------------------------------------------------------------
@@ -88,13 +88,13 @@ class Withdraw(BaseModel):
     amount: Mapped[Decimal] = mapped_column(
         SQLDecimal(precision=18, scale=2),
         nullable=False,
-        description="Requested withdrawal gross amount",
+        description="Requested withdrawal gross monetary amount",
     )
     fee: Mapped[Decimal] = mapped_column(
         SQLDecimal(precision=18, scale=2),
         default=Decimal("0.00"),
         nullable=False,
-        description="Withdrawal fee charged",
+        description="Withdrawal service/gateway fee charged",
     )
     net_amount: Mapped[Decimal] = mapped_column(
         SQLDecimal(precision=18, scale=2),
@@ -102,7 +102,10 @@ class Withdraw(BaseModel):
         description="Net payout amount to user after fee deduction",
     )
     currency: Mapped[str] = mapped_column(
-        String(10), default="BDT", nullable=False, description="Base currency code"
+        String(10),
+        default="BDT",
+        nullable=False,
+        description="Currency code for withdrawal (Default: BDT)",
     )
 
     # ------------------------------------------------------------------
@@ -112,15 +115,22 @@ class Withdraw(BaseModel):
         SQLEnum(WithdrawMethodType, name="withdraw_method_enum"),
         index=True,
         nullable=False,
-        description="Payout method selected by user",
+        description="Payout method selected by user (BKASH, NAGAD, ROCKET, BINANCE, USDT)",
     )
     receiver_name: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, description="Optional account holder name"
+        String(255),
+        nullable=True,
+        description="Optional account holder name",
     )
     receiver_account: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        description="Phone number, Binance UID, or Crypto Wallet Address",
+        description="Full destination phone number, Binance UID, or Crypto Wallet Address",
+    )
+    masked_receiver_account: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        description="Masked receiver account for safe user display (e.g., 018****5678)",
     )
 
     # ------------------------------------------------------------------
@@ -145,20 +155,22 @@ class Withdraw(BaseModel):
         default=WithdrawStatus.PENDING,
         index=True,
         nullable=False,
-        description="Current payout status",
+        description="Current payout status of the withdrawal request",
     )
     approved_by: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         nullable=True,
-        description="Telegram Admin User ID who processed or rejected request",
+        description="Telegram Admin User ID who processed, approved, or rejected this request",
     )
     processed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-        description="Timestamp when payout was completed/rejected",
+        description="Timestamp when withdrawal was completed, rejected, or cancelled",
     )
     admin_note: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, description="Admin remarks or rejection reasoning"
+        Text,
+        nullable=True,
+        description="Admin explanation, payout proof/TX hash note, or rejection reason",
     )
 
     # ------------------------------------------------------------------
@@ -168,10 +180,11 @@ class Withdraw(BaseModel):
     wallet: Mapped["Wallet"] = relationship("Wallet", backref="withdraws")
 
     # ------------------------------------------------------------------
-    # INDEXES FOR QUERY OPTIMIZATION
+    # INDEXES FOR OPTIMIZED AUDIT & LOOKUP
     # ------------------------------------------------------------------
     __table_args__ = (
         Index("idx_withdraw_user_status", "user_id", "status"),
+        Index("idx_withdraw_method_status", "withdraw_method", "status"),
     )
 
     def __repr__(self) -> str:
@@ -179,4 +192,4 @@ class Withdraw(BaseModel):
             f"<Withdraw(id={self.id}, withdraw_id='{self.withdraw_id}', "
             f"user_id={self.user_id}, net_amount={self.net_amount}, status='{self.status.value}')>"
         )
-      
+        
