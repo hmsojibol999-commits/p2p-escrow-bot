@@ -1,59 +1,62 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load
 
 load_dotenv()
 
-# Environment Variables Validation
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("Error: BOT_TOKEN environment variable is missing or empty.")
+def get_env(key: str, default: str = None, required: bool = False) -> str:
+    value = os.getenv(key, default)
+    if required and not value:
+        raise ValueError(f"Environment variable {key} is required but not set.")
+    return value
 
-owner_id_str = os.getenv("OWNER_ID")
-if not owner_id_str:
-    raise ValueError("Error: OWNER_ID environment variable is missing or empty.")
-OWNER_ID: int = int(owner_id_str)
+def get_env_int(key: str, default: int = None, required: bool = False) -> int:
+    value = os.getenv(key)
+    if value is None:
+        if required:
+            raise ValueError(f"Environment variable {key} is required but not set.")
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(f"Environment variable {key} must be an integer, got '{value}'.")
 
-support_admin_id_str = os.getenv("SUPPORT_ADMIN_ID")
-if not support_admin_id_str:
-    raise ValueError("Error: SUPPORT_ADMIN_ID environment variable is missing or empty.")
-SUPPORT_ADMIN_ID: int = int(support_admin_id_str)
+def get_env_float(key: str, default: float = None, required: bool = False) -> float:
+    value = os.getenv(key)
+    if value is None:
+        if required:
+            raise ValueError(f"Environment variable {key} is required but not set.")
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"Environment variable {key} must be a float, got '{value}'.")
 
-REQUIRED_CHANNEL_1 = os.getenv("REQUIRED_CHANNEL_1")
-if not REQUIRED_CHANNEL_1:
-    raise ValueError("Error: REQUIRED_CHANNEL_1 environment variable is missing or empty.")
+# Telegram Configuration
+BOT_TOKEN: str = get_env("BOT_TOKEN", required=True)
 
-REQUIRED_CHANNEL_2 = os.getenv("REQUIRED_CHANNEL_2")
-if not REQUIRED_CHANNEL_2:
-    raise ValueError("Error: REQUIRED_CHANNEL_2 environment variable is missing or empty.")
+# Admin Configuration
+OWNER_ID: int = get_env_int("OWNER_ID", required=True)
+SUPPORT_ADMIN_ID: int = get_env_int("SUPPORT_ADMIN_ID", required=True)
 
-port_str = os.getenv("PORT", "8080")
-PORT: int = int(port_str)
+# Force Join Configuration
+REQUIRED_CHANNEL_1: str = get_env("REQUIRED_CHANNEL_1", required=True)
+REQUIRED_CHANNEL_2: str = get_env("REQUIRED_CHANNEL_2", required=True)
 
-# Wallet Configuration Constants
-MIN_DEPOSIT: float = 50.0
-MIN_WITHDRAW: float = 100.0
+# Deposit & Withdraw Configuration
+MIN_DEPOSIT: float = get_env_float("MIN_DEPOSIT", required=True)
+MIN_WITHDRAW: float = get_env_float("MIN_WITHDRAW", required=True)
 
-# Marketplace Configuration Constants
-DEFAULT_CURRENCY: str = "BDT"
-MAX_PRODUCT_TITLE_LENGTH: int = 100
-MAX_CATEGORY_NAME_LENGTH: int = 50
-MAX_TXT_IMPORT_SIZE: int = 5 * 1024 * 1024  # 5 MB
+# Wallet Configuration
+DEFAULT_BALANCE: float = get_env_float("DEFAULT_BALANCE", 0.0)
 
-# Bot Configuration Constants
-BOT_NAME: str = "Digital Marketplace Bot"
-BOT_VERSION: str = "1.0.0"
+# Database Configuration
+DATABASE_PATH: str = get_env("DATABASE_PATH", "data/market.db")
 
-SUPPORT_RESPONSE_TEXT: str = (
-    "📞 **সাপোর্ট সেন্টার**\n\n"
-    "আপনার যেকোনো সমস্যা বা প্রয়োজনে আমাদের অ্যাডমিনের সাথে যোগাযোগ করুন:\n"
-    "অ্যাডমিন: @AdminUsername\n\n"
-    "দয়া করে আপনার সমস্যা বিস্তারিত জানান।"
-)
+# Render Web Service Configuration
+PORT: int = get_env_int("PORT", 10000)
 
-SELLER_INFO_TEXT: str = (
-    "🛒 **সেলার ইনফরমেশন**\n\n"
-    "আমাদের প্ল্যাটফর্মে সেলার হতে চাইলে নিচের নিয়মগুলো মেনে চলুন:\n"
-    "১. সঠিক পণ্য সরবরাহ করুন।\n"
-    "২. কোনো রকম ভুয়া বা স্ক্যাম পণ্য বিক্রি করা যাবে না।\n"
-    "৩. নিয়মের বাইরে গেলে অ্যাকাউন্ট স্থায়ীভাবে ব্যান করা হবে।"
-)
+# Bot Information
+BOT_NAME: str = get_env("BOT_NAME", "MarketplaceBot")
+
+# Logging Configuration
+LOG_LEVEL: str = get_env("LOG_LEVEL", "INFO")
