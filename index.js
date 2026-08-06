@@ -4,7 +4,7 @@ const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 
 // --- আপনার কনফিগারেশন এখানে দিন ---
-const TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN_HERE'; // আপনার টেলিগ্রাম বটের টোকেন
+const TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN_HERE'; 8901080829:AAFyob3AJvmdtnql6OHYrtJP9j5-OfZFCnA
 // -------------------------------------
 
 const app = express();
