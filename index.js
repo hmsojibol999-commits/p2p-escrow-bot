@@ -3,9 +3,16 @@ const pino = require('pino');
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 
-// --- আপনার কনফিগারেশন এখানে দিন ---
-const TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN_HERE'; 8901080829:AAFyob3AJvmdtnql6OHYrtJP9j5-OfZFCnA
-// -------------------------------------
+// -------------------------------------------------------------
+// ১. এখানে রেন্ডারের Environment Variable থেকে টোকেন অটো নিয়ে নেবে।
+// আপনার কোডের ভেতরে আর আলাদা করে টোকেন বসানোর কোনো দরকার নেই।
+// রেন্ডারের Environment Variables-এ 'TELEGRAM_BOT_TOKEN' নামে টোকেন দিলেই হবে।
+// -------------------------------------------------------------
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+if (!TELEGRAM_BOT_TOKEN) {
+    console.error("❌ Error: TELEGRAM_BOT_TOKEN environment variable is missing in Render!");
+}
 
 const app = express();
 app.use(express.json());
@@ -48,22 +55,19 @@ async function connectToWhatsApp() {
 
 connectToWhatsApp();
 
-// --- টেলিগ্রাম বটের মেসেজ হ্যান্ডলার ---
+// টেলিগ্রাম বটের মেসেজ হ্যান্ডলার
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text ? msg.text.trim() : '';
 
-    // যদি ব্যবহারকারী /start লেখে
     if (text === '/start') {
         return bot.sendMessage(chatId, "👋 স্বাগতম! যেকোনো হোয়াটসঅ্যাপ নাম্বার (যেমন: 88017XXXXXXXX) পাঠান, আমি চেক করে বলে দেব অ্যাকাউন্ট খোলা আছে কি না।");
     }
 
-    // নাম্বার চেক করার লজিক
-    // আমরা ইনপুট থেকে শুধু সংখ্যাগুলো আলাদা করে নিচ্ছি
     const phoneNumber = text.replace(/[^0-9]/g, '');
 
     if (phoneNumber.length < 8) {
-        return bot.sendMessage(chatId, "❌ দয়া করে একটি সঠিক ফোন নাম্বার পাঠান (যেমন: country code সহ)।");
+        return bot.sendMessage(chatId, "❌ দয়া করে একটি সঠিক ফোন নাম্বার পাঠান (কান্ট্রি কোড সহ)।");
     }
 
     if (!sock || !sock.onWhatsApp) {
