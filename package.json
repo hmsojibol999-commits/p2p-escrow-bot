@@ -1,0 +1,17 @@
+{
+  "name": "whatsapp-telegram-checker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.5",
+    "express": "^4.19.2",
+    "node-telegram-bot-api": "^0.65.1",
+    "pino": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
